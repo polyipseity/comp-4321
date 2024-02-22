@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 authors = [
-	{name = "evnchn", email = "37951241+evnchn@users.noreply.github.com"},
+	{name = "E God (evnchn)", email = "37951241+evnchn@users.noreply.github.com"},
 	{name = "Happypig375", email = "hadrianwttang@outlook.com"},
 	{name = "polyipseity", email = "polyipseity@gmail.com"},
 ]
@@ -43,4 +43,4 @@ requires-python = ">=3.11.0"
 repository = "https://github.com/polyipseity/comp-4321.git"
 
 [tool.setuptools.dynamic]
-version = {attr = "VERSION"}
+version = {attr = "egod_search.VERSION"}
