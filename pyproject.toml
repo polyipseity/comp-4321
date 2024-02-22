@@ -1,0 +1,46 @@
+[build-system]
+requires = ["setuptools>=69.0.0",]
+build-backend = "setuptools.build_meta"
+
+[project]
+authors = [
+	{name = "evnchn", email = "37951241+evnchn@users.noreply.github.com"},
+	{name = "Happypig375", email = "hadrianwttang@outlook.com"},
+	{name = "polyipseity", email = "polyipseity@gmail.com"},
+]
+classifiers = [
+	"Development Status :: 5 - Production/Stable",
+	"Environment :: Console",
+	"Framework :: AnyIO",
+	"Framework :: AsyncIO",
+	"Framework :: aiohttp",
+	"Intended Audience :: Information Technology",
+	"Natural Language :: English",
+	"Operating System :: OS Independent",
+	"Programming Language :: Python",
+	"Programming Language :: Python :: 3",
+	"Programming Language :: Python :: 3.11",
+	"Programming Language :: Python :: 3.12",
+	"Topic :: Internet",
+	"Topic :: Internet :: WWW/HTTP",
+	"Topic :: Internet :: WWW/HTTP :: Indexing/Search",
+	"Typing :: Typed",
+]
+dependencies = [
+	"aiohttp>=3.9.0",
+	"anyio>=4.3.0",
+	"beautifulsoup4>=4.12.0", # Extract HTML
+]
+description = "HKUST COMP 4321 sources dropped from heaven by E God himself!"
+dynamic = ["version",]
+keywords = []
+license = {file = "LICENSE.txt"}
+name = "egod-search" # synchronize with `__init__.py`
+readme = "README.md"
+requires-python = ">=3.11.0"
+
+[project.urls]
+repository = "https://github.com/polyipseity/comp-4321.git"
+
+[tool.setuptools.dynamic]
+version = {attr = "VERSION"}
