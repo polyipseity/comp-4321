@@ -30,7 +30,7 @@ dependencies = [
 	"aiohttp>=3.9.0",
 	"anyio>=4.3.0",
 	"beautifulsoup4>=4.12.0", # Extract HTML
-	"pandas>=2.2.0", # DataFrame: Our vector representation!
+	"httplib2>=0.22.0", # Better HTTP client
 ]
 description = "HKUST COMP 4321 sources dropped from heaven by E God himself!"
 dynamic = ["version",]
