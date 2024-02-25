@@ -1,18 +1,30 @@
+# -*- coding: UTF-8 -*-
+
 starting_page = "http://www.cse.ust.hk"
 number_of_pages = 50
 http_cache_path = ".cache"
 database_path = "crawled.json"
 result_path = "spider_result.txt"
 
+from types import EllipsisType
 import httplib2, json, re
 from bs4 import BeautifulSoup, SoupStrainer
 from queue import SimpleQueue
-from typing import NewType, Dict, TypedDict
+from typing import (
+    AbstractSet,
+    MutableMapping,
+    MutableSequence,
+    NewType,
+    Dict,
+    Sequence,
+    Set,
+    TypedDict,
+)
 from datetime import datetime
 from dateutil.parser import parse as parsedate
 from itertools import islice
 from os.path import isfile
-from urllib.parse import urljoin
+from urllib.parse import ParseResult as URL, urljoin
 
 WordId = NewType("WordId", int)
 PageId = NewType("PageId", int)
@@ -26,6 +38,53 @@ class Page(TypedDict):
     links: list[Url]
     last_modified: str
     text: str
+
+
+class Crawler:
+    """
+    Crawler class.
+    """
+
+    __slots__ = ("_queue", "_visited")
+
+    def __init__(self):
+        self._queue: MutableMapping[URL, EllipsisType] = {}
+        self._visited: Set[URL] = set()
+
+    def enqueue(self, url: URL):
+        """
+        Add  a URL to be crawled.
+
+        Raises `ValueError` if the URL has already been visited.
+        """
+        if url in self._visited:
+            raise ValueError(url)
+        self._queue[url] = ...
+
+    def crawl(self):
+        """
+        Crawl a enqueued URL.
+
+        Raises `TypeError` if there is nothing to crawl.
+        """
+        try:
+            url = next(iter(self._queue))
+        except StopIteration:
+            raise TypeError()
+
+    @property
+    def queue(self) -> Sequence[URL]:
+        """
+        URLs to be visited.
+        """
+        return tuple(self._queue)
+
+    @property
+    def visited(self) -> AbstractSet[URL]:
+        """
+        Already visited URLs.
+        """
+        return self._visited
 
 
 http = httplib2.Http(http_cache_path)
