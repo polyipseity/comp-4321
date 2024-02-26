@@ -49,6 +49,10 @@ class Crawler:
     __slots__ = ("_lock", "_queue", "_session", "_visited")
 
     class URLAlreadyVisited(Exception):
+        """
+        Exception for enqueueing an already visited URL.
+        """
+
         pass
 
     def __init__(self) -> None:
