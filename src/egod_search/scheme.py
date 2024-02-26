@@ -1,5 +1,4 @@
 # -*- coding: UTF-8 -*-
-from collections import defaultdict
 from random import randint
 from typing import (
     Any,
@@ -41,10 +40,6 @@ def new_URLStr(url_str: str) -> URLStr:
     return URLStr(str(URL(url_str)))
 
 
-def _RecursiveStrDefaultDict() -> MutableMapping[str, Any]:
-    return defaultdict(_RecursiveStrDefaultDict)
-
-
 def _try_get(obj: Any, key: Any, default: Any = {}) -> Any:
     try:
         return obj[key]
@@ -78,7 +73,7 @@ class Scheme:
         mod_time: Time
 
     @classmethod
-    def fix(cls, obj: Any) -> tuple["Scheme.Database", MutableMapping[str, Any]]:
+    def fix(cls, obj: Any) -> "Scheme.Database":
         """
         Convert an object to the scheme format.
         """
@@ -92,7 +87,6 @@ class Scheme:
                 "inverted_index": {},
             }
         )
-        invalid = _RecursiveStrDefaultDict()
 
         cur_obj = _try_get(obj, "URL_IDs")
         cur_IDs = set[URLID]()
@@ -100,21 +94,16 @@ class Scheme:
             try:
                 val = cur_obj[key]
             except Exception:
-                invalid["URL_IDs"][repr(key)] = None
                 continue
             if not (isinstance(key, str) and isinstance(val, int)):
-                invalid["URL_IDs"][repr(key)] = repr(val)
                 continue
-            key_fixed, val_fixed = new_URLStr(key), URLID(ID(val))
-            if key_fixed in valid["URL_IDs"]:
-                invalid["URL_IDs"][key] = val
+            key, val = new_URLStr(key), URLID(ID(val))
+            if key in valid["URL_IDs"]:
                 continue
-            if val_fixed in cur_IDs:
-                invalid["URL_IDs"][key] = val
-                while val_fixed in cur_IDs:
-                    val_fixed = gen_ID(URLID)
-            cur_IDs.add(val_fixed)
-            valid["URL_IDs"][key_fixed] = val_fixed
+            while val in cur_IDs:
+                val = gen_ID(URLID)
+            cur_IDs.add(val)
+            valid["URL_IDs"][key] = val
         valid_URL_IDs = cur_IDs
 
         cur_obj = _try_get(obj, "word_IDs")
@@ -123,18 +112,14 @@ class Scheme:
             try:
                 val = cur_obj[key]
             except Exception:
-                invalid["word_IDs"][repr(key)] = None
                 continue
             if not (isinstance(key, str) and isinstance(val, int)):
-                invalid["word_IDs"][repr(key)] = repr(val)
                 continue
-            key_fixed, val_fixed = Word(key), WordID(ID(val))
-            if val_fixed in cur_IDs:
-                invalid["word_IDs"][key] = val
-                while val_fixed in cur_IDs:
-                    val_fixed = gen_ID(WordID)
-            cur_IDs.add(val_fixed)
-            valid["word_IDs"][key_fixed] = val_fixed
+            key, val = Word(key), WordID(ID(val))
+            while val in cur_IDs:
+                val = gen_ID(WordID)
+            cur_IDs.add(val)
+            valid["word_IDs"][key] = val
         valid_word_IDs = cur_IDs
 
         def fix_page(obj: Any) -> Scheme.Page | None:
@@ -160,20 +145,16 @@ class Scheme:
             try:
                 val = cur_obj[key]
             except Exception:
-                invalid["pages"][repr(key)] = None
                 continue
             try:
                 key = URLID(ID(int(key)))
             except TypeError:
-                invalid["pages"][repr(key)] = repr(val)
                 continue
             if key not in valid_URL_IDs:
-                invalid["pages"][key] = repr(val)
                 continue
-            val_fixed = fix_page(val)
-            if val_fixed is None:
-                invalid["pages"][key] = repr(val)
+            val = fix_page(val)
+            if val is None:
                 continue
-            valid["pages"][key] = val_fixed
+            valid["pages"][key] = val
 
         return valid, invalid
