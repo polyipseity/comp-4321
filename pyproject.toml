@@ -31,6 +31,7 @@ dependencies = [
 	"anyio>=4.3.0",
 	"beautifulsoup4>=4.12.0", # Extract HTML
 	"httplib2>=0.22.0", # Better HTTP client
+	"yarl>=1.9.0", # URL utilities
 ]
 description = "HKUST COMP 4321 sources dropped from heaven by E God himself!"
 dynamic = ["version",]
