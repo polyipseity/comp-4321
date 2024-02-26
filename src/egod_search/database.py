@@ -1,8 +1,6 @@
 # -*- coding: UTF-8 -*-
 from asyncio import Lock
 from json import JSONDecodeError, dumps, loads
-from types import TracebackType
-from typing import Any, Callable, Type
 from anyio import AsyncFile
 
 
@@ -20,27 +18,9 @@ class Database:
 
         pass
 
-    def __init__(self, io_supplier: Callable[[], AsyncFile[str]]) -> None:
+    def __init__(self, io: AsyncFile[str]) -> None:
         self._lock = Lock()
-        self._io = io_supplier()
-
-    async def __aenter__(self) -> "Database":
-        await self._io.__aenter__()
-        return self
-
-    async def __aexit__(
-        self,
-        exc_type: Type[BaseException] | None,
-        exc_val: BaseException | None,
-        exc_tb: TracebackType | None,
-    ) -> None:
-        await self.aclose()
-
-    async def aclose(self) -> None:
-        """
-        Cleanup the database.
-        """
-        await self._io.aclose()
+        self._io = io
 
     async def clear(self) -> None:
         """
@@ -68,7 +48,7 @@ class Database:
             ) from exc
         return data
 
-    async def write(self, obj: Any) -> None:
+    async def write(self, obj: object) -> None:
         """
         Save the object to the database.
 
