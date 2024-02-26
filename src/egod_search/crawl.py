@@ -43,7 +43,7 @@ class Page(TypedDict):
 
 class Crawler:
     """
-    Crawler class.
+    Crawler that supports HTTP and HTTPS.
     """
 
     __slots__ = ("_lock", "_queue", "_session", "_visited")
@@ -68,7 +68,13 @@ class Crawler:
         exc_val: BaseException | None,
         exc_tb: TracebackType | None,
     ) -> None:
-        await self._session.__aexit__(exc_type, exc_val, exc_tb)
+        await self.aclose()
+
+    async def aclose(self) -> None:
+        """
+        Cleanup the crawler.
+        """
+        await self._session.close()
 
     async def enqueue(self, url: URL) -> None:
         """
