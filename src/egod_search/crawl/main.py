@@ -29,7 +29,7 @@ from ..scheme import (
     new_URLStr,
 )
 
-starting_page = URL("https://www.cse.ust.hk")
+starting_page = URL("https://cse.hkust.edu.hk/~kwtleung/COMP4321/testpage.htm")
 database_path = Path("crawled.json")
 result_path = Path("spider_result.txt")
 number_of_pages = 50
