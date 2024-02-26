@@ -68,18 +68,16 @@ class Database:
             ) from exc
         return data
 
-    async def write(self, object: Any) -> None:
+    async def write(self, obj: Any) -> None:
         """
         Save the object to the database.
 
         Raises `InvalidFormat` if the object is not serializable.
         """
         try:
-            text = dumps(object)
+            text = dumps(obj)
         except (TypeError, ValueError) as exc:
-            raise Database.InvalidFormat(
-                f"Object is not serializable: {object}"
-            ) from exc
+            raise Database.InvalidFormat(f"Object is not serializable: {obj}") from exc
 
         async with self._lock:
             await self._io.seek(0)
