@@ -78,7 +78,7 @@ class Scheme:
         Convert an object to the scheme format.
         """
 
-        valid = Scheme.Database(
+        ret = Scheme.Database(
             {
                 "URL_IDs": {},
                 "word_IDs": {},
@@ -98,12 +98,12 @@ class Scheme:
             if not (isinstance(key, str) and isinstance(val, int)):
                 continue
             key, val = new_URLStr(key), URLID(ID(val))
-            if key in valid["URL_IDs"]:
+            if key in ret["URL_IDs"]:
                 continue
             while val in cur_IDs:
                 val = gen_ID(URLID)
             cur_IDs.add(val)
-            valid["URL_IDs"][key] = val
+            ret["URL_IDs"][key] = val
         valid_URL_IDs = cur_IDs
 
         cur_obj = _try_get(obj, "word_IDs")
@@ -119,7 +119,7 @@ class Scheme:
             while val in cur_IDs:
                 val = gen_ID(WordID)
             cur_IDs.add(val)
-            valid["word_IDs"][key] = val
+            ret["word_IDs"][key] = val
         valid_word_IDs = cur_IDs
 
         def fix_page(obj: Any) -> Scheme.Page | None:
@@ -155,6 +155,6 @@ class Scheme:
             val = fix_page(val)
             if val is None:
                 continue
-            valid["pages"][key] = val
+            ret["pages"][key] = val
 
-        return valid, invalid
+        return ret
