@@ -30,9 +30,9 @@ from ..scheme import (
 )
 
 starting_page = URL("https://cse.hkust.edu.hk/~kwtleung/COMP4321/testpage.htm")
-database_path = Path("crawled.json")
+database_path = Path("database.json")
 result_path = Path("spider_result.txt")
-number_of_pages = 50
+number_of_pages = 30
 word_regex = compile(r"[a-zA-Z0-9\-_]+")
 
 
