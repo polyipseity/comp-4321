@@ -164,7 +164,7 @@ async def main() -> None:
             await result_file.write("\n")
 
 
-def parser(parent: Callable[..., ArgumentParser] | None = None):
+def parser(parent: Callable[..., ArgumentParser] | None = None) -> ArgumentParser:
     prog = modules[__name__].__package__ or __name__
     parser = (ArgumentParser if parent is None else parent)(
         prog=f"python -m {prog}",
