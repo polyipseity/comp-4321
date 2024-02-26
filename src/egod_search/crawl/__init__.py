@@ -61,9 +61,9 @@ class Crawler:
 
     async def crawl(self) -> tuple[ClientResponse, Collection[URL]]:
         """
-        Crawl a queued URL, enqueue the discovered URLs, and return the response and discovered URLs.
+        Crawl a queued URL, enqueue the discovered urls, and return the response and discovered urls.
 
-        Raises `TypeError` if there are no queued URLs.
+        Raises `TypeError` if there are no queued urls.
         """
         async with self._lock:
             try:
@@ -82,7 +82,7 @@ class Crawler:
         }:
             return response, ()
 
-        outbound_URLs = list[URL]()
+        outbound_urls = list[URL]()
         for a_tag in BeautifulSoup(
             content, "html.parser", parse_only=SoupStrainer("a")
         ):
@@ -96,32 +96,32 @@ class Crawler:
             for href in hrefs:
                 href_url = URL(href)
                 if href_url.is_absolute():
-                    outbound_URLs.append(href_url)
+                    outbound_urls.append(href_url)
                 else:
-                    outbound_URLs.append(response.url.join(href_url))
+                    outbound_urls.append(response.url.join(href_url))
 
         async with self._lock:
             self._visited |= frozenset(redirect.url for redirect in response.history)
             self._queue.update(
                 {
                     outbound_url: ...
-                    for outbound_url in outbound_URLs
+                    for outbound_url in outbound_urls
                     if outbound_url not in self._visited
                 }
             )
 
-        return response, outbound_URLs
+        return response, outbound_urls
 
     @property
     def queue(self) -> Sequence[URL]:
         """
-        URLs to be visited.
+        urls to be visited.
         """
         return tuple(self._queue)
 
     @property
     def visited(self) -> AbstractSet[URL]:
         """
-        Already visited URLs.
+        Already visited urls.
         """
         return self._visited

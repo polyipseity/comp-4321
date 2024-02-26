@@ -66,15 +66,15 @@ async def main() -> None:
                             continue
                         yield response
 
-            async for pages_indexed, (response, outbound_URLs) in aenumerate(
+            async for pages_indexed, (response, outbound_urls) in aenumerate(
                 crawl_ok_responses()
             ):
                 if pages_indexed >= number_of_pages:
                     break
-                URL_str = new_URLStr(response.url)
-                URL_ID = database_obj["URL_IDs"].setdefault(URL_str, gen_ID(URLID))
+                url_str = new_URLStr(response.url)
+                url_id = database_obj["url_ids"].setdefault(url_str, gen_ID(URLID))
                 page = database_obj["pages"].setdefault(
-                    URL_ID,
+                    url_id,
                     Scheme.Page(
                         {
                             "title": "",
@@ -102,21 +102,21 @@ async def main() -> None:
                     {
                         "title": "" if html.title is None else html.title.string or "",
                         "text": html.text,
-                        "links": list(map(new_URLStr, outbound_URLs)),
+                        "links": list(map(new_URLStr, outbound_urls)),
                         "mod_time": mod_time,
                     }
                 )
                 forward_index_page = database_obj["forward_index"].setdefault(
-                    URL_ID, {}
+                    url_id, {}
                 )
                 for match in word_regex.finditer(html.text):
                     position, word = WordPosition(match.start()), Word(match[0])
-                    word_ID = database_obj["word_IDs"].setdefault(word, gen_ID(WordID))
+                    word_id = database_obj["word_ids"].setdefault(word, gen_ID(WordID))
 
                     inverted_index_word_page = (
                         database_obj["inverted_index"]
-                        .setdefault(word_ID, {})
-                        .setdefault(URL_ID, [])
+                        .setdefault(word_id, {})
+                        .setdefault(url_id, [])
                     )
                     insert_index = bisect_right(inverted_index_word_page, position)
                     if (
@@ -126,18 +126,18 @@ async def main() -> None:
                         continue
 
                     inverted_index_word_page.insert(insert_index, position)
-                    forward_index_page[word_ID] = WordFrequency(
-                        forward_index_page.setdefault(word_ID, WordFrequency(0)) + 1
+                    forward_index_page[word_id] = WordFrequency(
+                        forward_index_page.setdefault(word_id, WordFrequency(0)) + 1
                     )
 
         await database.write(database_obj)
 
     database_obj = Scheme.hydrate(database_obj)
     async with await result_path.open("wt") as result_file:
-        for URL_ID, page in database_obj["pages"].items():
+        for url_id, page in database_obj["pages"].items():
             await result_file.write(page["title"] or "(no title)")
             await result_file.write("\n")
-            await result_file.write(database_obj["URLs"][URL_ID])
+            await result_file.write(database_obj["urls"][url_id])
             await result_file.write("\n")
             await result_file.write(str(page["mod_time"]) or "(no modification time)")
             await result_file.write(", ")
@@ -145,10 +145,10 @@ async def main() -> None:
                 str(len(page["text"])) if page["text"] else "(no text)"
             )
             await result_file.write("\n")
-            for word_ID, frequency in islice(
-                database_obj["forward_index"][URL_ID].items(), 10
+            for word_id, frequency in islice(
+                database_obj["forward_index"][url_id].items(), 10
             ):
-                await result_file.write(database_obj["words"][word_ID])
+                await result_file.write(database_obj["words"][word_id])
                 await result_file.write(" ")
                 await result_file.write(str(frequency))
                 await result_file.write("; ")

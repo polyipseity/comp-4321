@@ -81,8 +81,8 @@ def _try_iter(obj: object, default: Iterator[object] = iter(())) -> Iterator[obj
 
 class Scheme:
     class Database(TypedDict):
-        URL_IDs: MutableMapping[URLStr, URLID]
-        word_IDs: MutableMapping[Word, WordID]
+        url_ids: MutableMapping[URLStr, URLID]
+        word_ids: MutableMapping[Word, WordID]
 
         pages: MutableMapping[URLID, "Scheme.Page"]
 
@@ -108,29 +108,29 @@ class Scheme:
 
         ret = Scheme.Database(
             {
-                "URL_IDs": {},
-                "word_IDs": {},
+                "url_ids": {},
+                "word_ids": {},
                 "pages": {},
                 "inverted_index": {},
                 "forward_index": {},
             }
         )
 
-        cur_obj = _try_get(obj, "URL_IDs")
+        cur_obj = _try_get(obj, "url_ids")
         cur_IDs = set[URLID]()
         for key in _try_iter(cur_obj):
             if (val := _try_get(cur_obj, key)) is ... or (val := _try_int(val)) is ...:
                 continue
             key, val = new_URLStr(_str_repr(key)), URLID(ID(val))
-            if key in ret["URL_IDs"]:
+            if key in ret["url_ids"]:
                 continue
             while val in cur_IDs:
                 val = gen_ID(URLID)
             cur_IDs.add(val)
-            ret["URL_IDs"][key] = val
-        valid_URL_IDs = cur_IDs
+            ret["url_ids"][key] = val
+        valid_url_ids = cur_IDs
 
-        cur_obj = _try_get(obj, "word_IDs")
+        cur_obj = _try_get(obj, "word_ids")
         cur_IDs = set[WordID]()
         for key in _try_iter(cur_obj):
             if (val := _try_get(cur_obj, key)) is ... or (val := _try_int(val)) is ...:
@@ -139,8 +139,8 @@ class Scheme:
             while val in cur_IDs:
                 val = gen_ID(WordID)
             cur_IDs.add(val)
-            ret["word_IDs"][key] = val
-        valid_word_IDs = cur_IDs
+            ret["word_ids"][key] = val
+        valid_word_ids = cur_IDs
 
         def fix_page(obj: object) -> Scheme.Page | EllipsisType:
             if (cur_obj := _try_get(obj, "text")) is ...:
@@ -163,27 +163,27 @@ class Scheme:
                 }
             )
 
-        def fix_key_as_URL_ID(key: object) -> URLID | EllipsisType:
+        def fix_key_as_url_id(key: object) -> URLID | EllipsisType:
             try:
                 return URLID(ID(int(_str_repr(key))))
             except (TypeError, ValueError):
                 try:
-                    return ret["URL_IDs"][new_URLStr(_str_repr(key))]
+                    return ret["url_ids"][new_URLStr(_str_repr(key))]
                 except KeyError:
                     return ...
 
-        def fix_key_as_word_ID(key: object) -> WordID | EllipsisType:
+        def fix_key_as_word_id(key: object) -> WordID | EllipsisType:
             try:
                 return WordID(ID(int(_str_repr(key))))
             except (TypeError, ValueError):
                 try:
-                    return ret["word_IDs"][Word(_str_repr(key))]
+                    return ret["word_ids"][Word(_str_repr(key))]
                 except KeyError:
                     return ...
 
         cur_obj = _try_get(obj, "pages")
         for key in _try_iter(cur_obj):
-            if (key := fix_key_as_URL_ID(key)) is ... or key not in valid_URL_IDs:
+            if (key := fix_key_as_url_id(key)) is ... or key not in valid_url_ids:
                 continue
             if (val := _try_get(cur_obj, key)) is ... or (val := fix_page(val)) is ...:
                 continue
@@ -191,41 +191,41 @@ class Scheme:
 
         # `forward_index` is generated from `inverted_index`
         cur_obj = _try_get(obj, "inverted_index")
-        for key_word_ID in _try_iter(cur_obj):
+        for key_word_id in _try_iter(cur_obj):
             if (
-                key_word_ID := fix_key_as_word_ID(key_word_ID)
-            ) is ... or key_word_ID not in valid_word_IDs:
+                key_word_id := fix_key_as_word_id(key_word_id)
+            ) is ... or key_word_id not in valid_word_ids:
                 continue
-            if (val_word_ID := _try_get(cur_obj, key_word_ID)) is ...:
+            if (val_word_id := _try_get(cur_obj, key_word_id)) is ...:
                 continue
-            ret["inverted_index"][key_word_ID] = {}
-            inverted_index_word = ret["inverted_index"][key_word_ID]
-            for key_URL_ID in _try_iter(val_word_ID):
+            ret["inverted_index"][key_word_id] = {}
+            inverted_index_word = ret["inverted_index"][key_word_id]
+            for key_url_id in _try_iter(val_word_id):
                 if (
-                    key_URL_ID := fix_key_as_URL_ID(key_URL_ID)
-                ) is ... or key_URL_ID not in valid_URL_IDs:
+                    key_url_id := fix_key_as_url_id(key_url_id)
+                ) is ... or key_url_id not in valid_url_ids:
                     continue
-                if (val_URL_ID := _try_get(val_word_ID, key_URL_ID)) is ...:
+                if (val_url_id := _try_get(val_word_id, key_url_id)) is ...:
                     continue
-                inverted_index_word[key_URL_ID] = (
+                inverted_index_word[key_url_id] = (
                     inverted_index_word_URL := sorted(
                         set(
                             WordPosition(pos)
                             for pos in map(
-                                _try_int, map(_str_repr, _try_iter(val_URL_ID))
+                                _try_int, map(_str_repr, _try_iter(val_url_id))
                             )
                             if isinstance(pos, int) and pos >= 0
                         )
                     )
                 )
-                ret["forward_index"][key_URL_ID][key_word_ID] = WordFrequency(
+                ret["forward_index"][key_url_id][key_word_id] = WordFrequency(
                     len(inverted_index_word_URL)
                 )
 
         return ret
 
     class HydratedDatabase(Database):
-        URLs: MutableMapping[URLID, URLStr]
+        urls: MutableMapping[URLID, URLStr]
         words: MutableMapping[WordID, Word]
 
     @classmethod
@@ -234,6 +234,6 @@ class Scheme:
         Copy and hydrate the scheme object.
         """
         ret = cast(Scheme.HydratedDatabase, deepcopy(scheme))
-        ret["URLs"] = {val: key for key, val in ret["URL_IDs"].items()}
-        ret["words"] = {val: key for key, val in ret["word_IDs"].items()}
+        ret["urls"] = {val: key for key, val in ret["url_ids"].items()}
+        ret["words"] = {val: key for key, val in ret["word_ids"].items()}
         return ret
