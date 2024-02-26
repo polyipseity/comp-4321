@@ -3,7 +3,7 @@ from asyncio import Lock
 from types import EllipsisType, TracebackType
 from aiohttp import ClientResponse, ClientSession
 from bs4 import BeautifulSoup, SoupStrainer, Tag
-from typing import AbstractSet, MutableMapping, MutableSet, Sequence, Type
+from typing import AbstractSet, Collection, MutableMapping, MutableSet, Sequence, Type
 from yarl import URL
 
 
@@ -59,9 +59,9 @@ class Crawler:
                 raise Crawler.URLAlreadyVisited(f"URL already visited: {url}")
             self._queue[url] = ...
 
-    async def crawl(self) -> ClientResponse:
+    async def crawl(self) -> tuple[ClientResponse, Collection[URL]]:
         """
-        Crawl a queued URL, enqueue the discovered URLs, and return the response.
+        Crawl a queued URL, enqueue the discovered URLs, and return the response and discovered URLs.
 
         Raises `TypeError` if there are no queued URLs.
         """
@@ -80,9 +80,9 @@ class Crawler:
             "application/xml",
             "text/html",
         }:
-            return response
+            return response, ()
 
-        outbound_urls = list[URL]()
+        outbound_URLs = list[URL]()
         for a_tag in BeautifulSoup(
             content, "html.parser", parse_only=SoupStrainer("a")
         ):
@@ -96,21 +96,21 @@ class Crawler:
             for href in hrefs:
                 href_url = URL(href)
                 if href_url.is_absolute():
-                    outbound_urls.append(href_url)
+                    outbound_URLs.append(href_url)
                 else:
-                    outbound_urls.append(response.url.join(href_url))
+                    outbound_URLs.append(response.url.join(href_url))
 
         async with self._lock:
             self._visited |= frozenset(redirect.url for redirect in response.history)
             self._queue.update(
                 {
                     outbound_url: ...
-                    for outbound_url in outbound_urls
+                    for outbound_url in outbound_URLs
                     if outbound_url not in self._visited
                 }
             )
 
-        return response
+        return response, outbound_URLs
 
     @property
     def queue(self) -> Sequence[URL]:

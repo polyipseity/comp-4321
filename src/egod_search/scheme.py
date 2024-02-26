@@ -1,4 +1,5 @@
 # -*- coding: UTF-8 -*-
+from copy import deepcopy
 from random import randint
 from types import EllipsisType
 from typing import (
@@ -9,13 +10,14 @@ from typing import (
     NewType,
     TypeVar,
     TypedDict,
+    cast,
 )
 from yarl import URL
 
 _T = TypeVar("_T")
 
 ID = NewType("ID", int)
-Time = NewType("Time", int)
+Timestamp = NewType("Timestamp", int)
 URLID = NewType("URLID", ID)
 URLStr = NewType("URLStr", str)
 Word = NewType("Word", str)
@@ -23,7 +25,7 @@ WordFrequency = NewType("WordFrequency", int)
 WordID = NewType("WordID", ID)
 WordPosition = NewType("WordPosition", int)
 
-NULL_TIME = Time(-1)
+NULL_TIME = Timestamp(-1)
 
 
 def gen_ID(type: Callable[[ID], _T] = ID) -> _T:
@@ -33,11 +35,11 @@ def gen_ID(type: Callable[[ID], _T] = ID) -> _T:
     return type(ID(randint(0, 2**64 - 1)))
 
 
-def new_URLStr(url_str: str) -> URLStr:
+def new_URLStr(url: str | URL) -> URLStr:
     """
     Normalize a URL string.
     """
-    return URLStr(str(URL(url_str)))
+    return URLStr(str(URL(url) if isinstance(url, str) else url))
 
 
 def _str_repr(obj: object) -> str:
@@ -85,7 +87,10 @@ class Scheme:
         pages: MutableMapping[URLID, "Scheme.Page"]
 
         inverted_index: MutableMapping[
-            WordID, MutableMapping[URLID, MutableSequence[WordPosition]]
+            WordID,
+            MutableMapping[
+                URLID, MutableSequence[WordPosition]
+            ],  # positions are unique and sorted
         ]
         forward_index: MutableMapping[URLID, MutableMapping[WordID, WordFrequency]]
 
@@ -93,7 +98,7 @@ class Scheme:
         title: str
         text: str
         links: MutableSequence[URLStr]
-        mod_time: Time
+        mod_time: Timestamp
 
     @classmethod
     def fix(cls, obj: object) -> "Scheme.Database":
@@ -152,7 +157,7 @@ class Scheme:
                             map(_str_repr, _try_iter(_try_get(obj, "links"))),
                         )
                     ),
-                    "mod_time": Time(
+                    "mod_time": Timestamp(
                         _try_int(_try_get(obj, "mod_time", NULL_TIME), -1)
                     ),
                 }
@@ -217,4 +222,18 @@ class Scheme:
                     len(inverted_index_word_URL)
                 )
 
+        return ret
+
+    class HydratedDatabase(Database):
+        URLs: MutableMapping[URLID, URLStr]
+        words: MutableMapping[WordID, Word]
+
+    @classmethod
+    def hydrate(cls, scheme: "Scheme.Database") -> "Scheme.HydratedDatabase":
+        """
+        Copy and hydrate the scheme object.
+        """
+        ret = cast(Scheme.HydratedDatabase, deepcopy(scheme))
+        ret["URLs"] = {val: key for key, val in ret["URL_IDs"].items()}
+        ret["words"] = {val: key for key, val in ret["word_IDs"].items()}
         return ret
