@@ -1,7 +1,6 @@
 # -*- coding: UTF-8 -*-
 from random import randint
 from typing import (
-    Any,
     Callable,
     Iterator,
     MutableMapping,
@@ -40,16 +39,20 @@ def new_URLStr(url_str: str) -> URLStr:
     return URLStr(str(URL(url_str)))
 
 
-def _try_get(obj: Any, key: Any, default: Any = {}) -> Any:
+def _str_repr(obj: object) -> str:
+    return obj if isinstance(obj, str) else repr(obj)
+
+
+def _try_get(obj: object, key: object, default: object = ...) -> object:
     try:
-        return obj[key]
+        return obj[key] # type: ignore
     except Exception:
         return default
 
 
-def _try_iter(obj: Any, default: Iterator[Any] = iter(())) -> Iterator[Any]:
+def _try_iter(obj: object, default: Iterator[object] = iter(())) -> Iterator[object]:
     try:
-        return iter(obj)
+        return iter(obj) # type: ignore
     except Exception:
         return default
 
@@ -73,7 +76,7 @@ class Scheme:
         mod_time: Time
 
     @classmethod
-    def fix(cls, obj: Any) -> "Scheme.Database":
+    def fix(cls, obj: object) -> "Scheme.Database":
         """
         Convert an object to the scheme format.
         """

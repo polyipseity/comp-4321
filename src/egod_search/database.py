@@ -50,7 +50,7 @@ class Database:
             await self._io.seek(0)
             await self._io.truncate()
 
-    async def read(self) -> Any:
+    async def read(self) -> object:
         """
         Read the object from the database.
 
