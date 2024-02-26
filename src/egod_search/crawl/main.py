@@ -37,7 +37,7 @@ word_regex = compile(r"[a-zA-Z0-9\-_]+")
 
 
 async def main() -> None:
-    async with await database_path.open("r+t") as database_file:
+    async with await database_path.open("a+t") as database_file:
         database = Database(database_file)
         try:
             database_obj = await database.read()
@@ -120,8 +120,8 @@ async def main() -> None:
                     )
                     insert_index = bisect_right(inverted_index_word_page, position)
                     if (
-                        inverted_index_word_page
-                        and inverted_index_word_page[insert_index] == position
+                        insert_index >= 1
+                        and inverted_index_word_page[insert_index - 1] == position
                     ):
                         continue
 
@@ -139,7 +139,7 @@ async def main() -> None:
             await result_file.write("\n")
             await result_file.write(database_obj["urls"][url_id])
             await result_file.write("\n")
-            await result_file.write(str(page["mod_time"]) or "(no modification time)")
+            await result_file.write(str(page["mod_time"] or "(no modification time)"))
             await result_file.write(", ")
             await result_file.write(
                 str(len(page["text"])) if page["text"] else "(no text)"

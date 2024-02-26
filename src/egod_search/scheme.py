@@ -25,7 +25,7 @@ WordFrequency = NewType("WordFrequency", int)
 WordID = NewType("WordID", ID)
 WordPosition = NewType("WordPosition", int)
 
-NULL_TIME = Timestamp(-1)
+NULL_TIME = Timestamp(0)
 
 
 def gen_ID(type: Callable[[ID], _T] = ID) -> _T:
