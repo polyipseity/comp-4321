@@ -1,13 +1,5 @@
 # -*- coding: UTF-8 -*-
-
-starting_page = "http://www.cse.ust.hk"
-number_of_pages = 50
-http_cache_path = ".cache"
-database_path = "crawled.json"
-result_path = "spider_result.txt"
-
 from asyncio import Lock
-from operator import attrgetter
 from types import EllipsisType, TracebackType
 from aiohttp import ClientResponse, ClientSession
 import httplib2, json, re
@@ -16,7 +8,6 @@ from queue import SimpleQueue
 from typing import (
     AbstractSet,
     MutableMapping,
-    MutableSequence,
     NewType,
     Dict,
     Sequence,
@@ -24,13 +15,17 @@ from typing import (
     Type,
     TypedDict,
 )
-from datetime import datetime
 from dateutil.parser import parse as parsedate
 from itertools import islice
 from os.path import isfile
 from urllib.parse import urljoin
-
 from yarl import URL
+
+starting_page = "http://www.cse.ust.hk"
+number_of_pages = 50
+http_cache_path = ".cache"
+database_path = "crawled.json"
+result_path = "spider_result.txt"
 
 WordId = NewType("WordId", int)
 PageId = NewType("PageId", int)
