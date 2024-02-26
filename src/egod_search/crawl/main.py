@@ -17,7 +17,7 @@ from .. import VERSION
 from ..crawl import Crawler
 from ..database import Database
 from ..scheme import (
-    NULL_TIME,
+    NULL_TIMESTAMP,
     URLID,
     Scheme,
     Timestamp,
@@ -80,7 +80,7 @@ async def main() -> None:
                             "title": "",
                             "text": "",
                             "links": [],
-                            "mod_time": NULL_TIME,
+                            "mod_time": NULL_TIMESTAMP,
                         }
                     ),
                 )
@@ -94,8 +94,8 @@ async def main() -> None:
                         )
                     )
                 except ValueError:
-                    mod_time = NULL_TIME
-                if mod_time != NULL_TIME and mod_time <= page["mod_time"]:
+                    mod_time = NULL_TIMESTAMP
+                if mod_time != NULL_TIMESTAMP and mod_time <= page["mod_time"]:
                     continue
                 html = BeautifulSoup(await response.text(), "html.parser")
                 page.update(
