@@ -37,7 +37,12 @@ word_regex = compile(r"[a-zA-Z0-9\-_]+")
 
 
 async def main() -> None:
-    async with await database_path.open("a+t") as database_file:
+    try:
+        async with await database_path.open("xt"):
+            pass
+    except FileExistsError:
+        pass
+    async with await database_path.open("r+t") as database_file:
         database = Database(database_file)
         try:
             database_obj = await database.read()
