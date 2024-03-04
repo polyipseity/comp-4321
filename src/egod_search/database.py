@@ -55,7 +55,7 @@ class Database:
         Raises `InvalidFormat` if the object is not serializable.
         """
         try:
-            text = dumps(obj)
+            text = dumps(obj, indent=2) # // evnchn: make the database readable
         except (TypeError, ValueError) as exc:
             raise Database.InvalidFormat(f"Object is not serializable: {obj}") from exc
 
