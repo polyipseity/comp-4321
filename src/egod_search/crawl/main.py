@@ -16,17 +16,16 @@ from yarl import URL
 from .. import VERSION
 from ..crawl import Crawler
 from ..database import Database
-from ..scheme import (
-    NULL_TIMESTAMP,
-    URLID,
-    Scheme,
+from ..scheme import Scheme
+from ..types import (
     Timestamp,
+    Timestamp_NULL,
+    URLID_gen,
+    URLStr,
     Word,
     WordFrequency,
-    WordID,
+    WordID_gen,
     WordPosition,
-    gen_ID,
-    new_URLStr,
 )
 
 starting_page = URL("https://cse.hkust.edu.hk/~kwtleung/COMP4321/testpage.htm")
@@ -76,8 +75,8 @@ async def main() -> None:
             ):
                 if pages_indexed >= number_of_pages:
                     break
-                url_str = new_URLStr(response.url)
-                url_id = database_obj["url_ids"].setdefault(url_str, gen_ID(URLID))
+                url_str = URLStr(response.url)
+                url_id = database_obj["url_ids"].setdefault(url_str, URLID_gen())
                 page = database_obj["pages"].setdefault(
                     url_id,
                     Scheme.Page(
@@ -85,7 +84,7 @@ async def main() -> None:
                             "title": "",
                             "text": "",
                             "links": [],
-                            "mod_time": NULL_TIMESTAMP,
+                            "mod_time": Timestamp_NULL,
                         }
                     ),
                 )
@@ -99,15 +98,15 @@ async def main() -> None:
                         )
                     )
                 except ValueError:
-                    mod_time = NULL_TIMESTAMP
-                if mod_time != NULL_TIMESTAMP and mod_time <= page["mod_time"]:
+                    mod_time = Timestamp_NULL
+                if mod_time != Timestamp_NULL and mod_time <= page["mod_time"]:
                     continue
                 html = BeautifulSoup(await response.text(), "html.parser")
                 page.update(
                     {
                         "title": "" if html.title is None else html.title.string or "",
                         "text": html.text,
-                        "links": list(map(new_URLStr, outbound_urls)),
+                        "links": list(map(URLStr, outbound_urls)),
                         "mod_time": mod_time,
                     }
                 )
@@ -116,7 +115,7 @@ async def main() -> None:
                 )
                 for match in word_regex.finditer(html.text):
                     position, word = WordPosition(match.start()), Word(match[0])
-                    word_id = database_obj["word_ids"].setdefault(word, gen_ID(WordID))
+                    word_id = database_obj["word_ids"].setdefault(word, WordID_gen())
 
                     inverted_index_word_page = (
                         database_obj["inverted_index"]

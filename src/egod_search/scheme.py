@@ -1,45 +1,31 @@
 # -*- coding: UTF-8 -*-
 from copy import deepcopy
-from random import randint
 from types import EllipsisType
 from typing import (
-    Callable,
     Iterator,
     MutableMapping,
     MutableSequence,
-    NewType,
     TypeVar,
     TypedDict,
     cast,
 )
-from yarl import URL
+
+from .types import (
+    ID,
+    URLID,
+    Timestamp,
+    Timestamp_NULL,
+    URLID_gen,
+    URLStr,
+    URLStr_,
+    Word,
+    WordFrequency,
+    WordID,
+    WordID_gen,
+    WordPosition,
+)
 
 _T = TypeVar("_T")
-
-ID = NewType("ID", int)
-Timestamp = NewType("Timestamp", int)
-URLID = NewType("URLID", ID)
-URLStr = NewType("URLStr", str)
-Word = NewType("Word", str)
-WordFrequency = NewType("WordFrequency", int)
-WordID = NewType("WordID", ID)
-WordPosition = NewType("WordPosition", int)
-
-NULL_TIMESTAMP = Timestamp(0)
-
-
-def gen_ID(type: Callable[[ID], _T] = ID) -> _T:
-    """
-    Generate a new ID.
-    """
-    return type(ID(randint(0, 2**64 - 1)))
-
-
-def new_URLStr(url: str | URL) -> URLStr:
-    """
-    Normalize a URL string.
-    """
-    return URLStr(str(URL(url) if isinstance(url, str) else url))
 
 
 def _str_repr(obj: object) -> str:
@@ -81,7 +67,7 @@ def _try_iter(obj: object, default: Iterator[object] = iter(())) -> Iterator[obj
 
 class Scheme:
     class Database(TypedDict):
-        url_ids: MutableMapping[URLStr, URLID]
+        url_ids: MutableMapping[URLStr_, URLID]
         word_ids: MutableMapping[Word, WordID]
 
         pages: MutableMapping[URLID, "Scheme.Page"]
@@ -97,7 +83,7 @@ class Scheme:
     class Page(TypedDict):
         title: str
         text: str
-        links: MutableSequence[URLStr]
+        links: MutableSequence[URLStr_]
         mod_time: Timestamp
 
     @classmethod
@@ -121,11 +107,11 @@ class Scheme:
         for key in _try_iter(cur_obj):
             if (val := _try_get(cur_obj, key)) is ... or (val := _try_int(val)) is ...:
                 continue
-            key, val = new_URLStr(_str_repr(key)), URLID(ID(val))
+            key, val = URLStr(_str_repr(key)), URLID(ID(val))
             if key in ret["url_ids"]:
                 continue
             while val in cur_IDs:
-                val = gen_ID(URLID)
+                val = URLID_gen()
             cur_IDs.add(val)
             ret["url_ids"][key] = val
         valid_url_ids = cur_IDs
@@ -137,7 +123,7 @@ class Scheme:
                 continue
             key, val = Word(_str_repr(key)), WordID(ID(val))
             while val in cur_IDs:
-                val = gen_ID(WordID)
+                val = WordID_gen()
             cur_IDs.add(val)
             ret["word_ids"][key] = val
         valid_word_ids = cur_IDs
@@ -153,12 +139,12 @@ class Scheme:
                     "text": text,
                     "links": list(
                         map(
-                            new_URLStr,
+                            URLStr,
                             map(_str_repr, _try_iter(_try_get(obj, "links"))),
                         )
                     ),
                     "mod_time": Timestamp(
-                        _try_int(_try_get(obj, "mod_time"), NULL_TIMESTAMP)
+                        _try_int(_try_get(obj, "mod_time"), Timestamp_NULL)
                     ),
                 }
             )
@@ -168,7 +154,7 @@ class Scheme:
                 return URLID(ID(int(_str_repr(key))))
             except (TypeError, ValueError):
                 try:
-                    return ret["url_ids"][new_URLStr(_str_repr(key))]
+                    return ret["url_ids"][URLStr(_str_repr(key))]
                 except KeyError:
                     return ...
 
@@ -225,7 +211,7 @@ class Scheme:
         return ret
 
     class HydratedDatabase(Database):
-        urls: MutableMapping[URLID, URLStr]
+        urls: MutableMapping[URLID, URLStr_]
         words: MutableMapping[WordID, Word]
 
     @classmethod
