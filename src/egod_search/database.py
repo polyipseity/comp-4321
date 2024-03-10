@@ -47,7 +47,7 @@ class Database:
             data = loads(text)
         except JSONDecodeError as exc:
             raise Database.InvalidFormat(
-                f"Database is not deserializable.", text
+                f"Database is not deserializable: {text}"
             ) from exc
         return data
 
@@ -60,7 +60,7 @@ class Database:
         try:
             text = dumps(obj, indent=2)  # evnchn: make the database readable
         except (TypeError, ValueError) as exc:
-            raise Database.InvalidFormat(f"Object is not serializable.", obj) from exc
+            raise Database.InvalidFormat(f"Object is not serializable: {obj}") from exc
 
         async with self._lock:
             await self._io.seek(0)

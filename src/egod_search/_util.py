@@ -53,7 +53,7 @@ class Transaction:
                     exceptions.append(exc)
             if exceptions:
                 raise exc_val from ExceptionGroup(
-                    "Exception(s) occurred while rolling back.", exceptions
+                    "Exception(s) occurred while rolling back", exceptions
                 )
         if self._parent is not None:
             self._parent.push_many(self._callables)

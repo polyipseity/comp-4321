@@ -350,7 +350,7 @@ class Scheme:
         )
         with self._lock:
             if url_id not in urls:
-                raise ValueError("URL ID not found.", url_id)
+                raise ValueError(f"URL ID not found: {url_id}")
             with Transaction(transaction) as trans:
                 try:
                     db_page = pages[url_id]
@@ -503,5 +503,5 @@ class Scheme:
     @classmethod
     def _modify(cls, obj: object) -> object:
         if not any(isinstance(obj, valid_cls) for valid_cls in (dict, list)):
-            raise ValueError("The object is not modifiable.", obj)
+            raise ValueError(f"Object is not modifiable: {obj}")
         return obj

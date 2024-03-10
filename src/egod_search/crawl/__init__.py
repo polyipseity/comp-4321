@@ -74,10 +74,10 @@ class Crawler:
         Raises `ValueError` if the URL is invalid. Raises `URLAlreadyVisited` if the URL has already been visited.
         """
         if url.scheme not in self.SUPPORTED_SCHEMES:
-            raise ValueError(f"URL with invalid scheme.", url)
+            raise ValueError(f"URL with invalid scheme: {url}")
         async with self._lock:
             if url in self._visited:
-                raise Crawler.URLAlreadyVisited(f"URL already visited.", url)
+                raise Crawler.URLAlreadyVisited(f"URL already visited: {url}")
             self._queue[url] = ...
 
     async def enqueue_many(self, urls: Collection[URL]) -> None:
@@ -87,23 +87,23 @@ class Crawler:
         if unsupported := tuple(
             url for url in urls if url.scheme not in self.SUPPORTED_SCHEMES
         ):
-            raise ValueError(f"URL(s) with invalid scheme.", unsupported)
+            raise ValueError(f"URL(s) with invalid scheme: {unsupported}")
         async with self._lock:
             if visited := self._visited & frozenset(urls):
-                raise Crawler.URLAlreadyVisited(f"URL(s) already visited.", visited)
+                raise Crawler.URLAlreadyVisited(f"URL(s) already visited: {visited}")
             self._queue.update((url, ...) for url in urls)
 
     async def crawl(self) -> tuple[ClientResponse, Collection[URL]]:
         """
-        Crawl a queued URL, enqueue the discovered urls, and return the response and discovered urls.
+        Crawl a queued URL, enqueue the discovered URLs, and return the response and discovered URLs.
 
-        Raises `TypeError` if there are no queued urls.
+        Raises `TypeError` if there are no queued URLs.
         """
         async with self._lock:
             try:
                 href_url = next(iter(self._queue))
             except StopIteration:
-                raise TypeError()
+                raise TypeError("No queued URLs")
             self._visited.add(href_url)
             del self._queue[href_url]
 

@@ -39,7 +39,7 @@ Location of the word in a page.
 if not TYPE_CHECKING:
 
     def URLStr_(_x: object) -> NoReturn:
-        raise TypeError("Use `URLStr` instead to create me.")
+        raise TypeError("Use `URLStr` instead to create me")
 
 
 def URLStr(_x: str | URL) -> _URLStr:
