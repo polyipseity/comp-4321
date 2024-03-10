@@ -8,6 +8,7 @@ from itertools import islice
 from operator import delitem, setitem
 from re import compile
 from threading import RLock
+from tqdm.auto import tqdm
 from types import EllipsisType
 from typing import (
     Any,
@@ -449,6 +450,7 @@ class Scheme:
         count: int | None = None,
         keyword_count: int | None = 10,
         link_count: int | None = 10,
+        show_progress: bool = False,
     ) -> None:
         """
         Write a summary of the database to `fp`.
@@ -456,10 +458,21 @@ class Scheme:
         `count` is the number of results to return. `None` means all results.
         `keyword_count` is the number of keywords, most frequent first, per result. `None` means all keywords.
         `link_count` is the number of links, ordered alphabetically, per result. `None` means all links.
+        `show_progress` is whether to show a progress bar.
         """
         with self._lock:
             separator = ""
-            for url_id, page in islice(self._database["pages"].items(), count):
+            for url_id, page in tqdm(
+                islice(self._database["pages"].items(), count),
+                total=(
+                    len(self._database["pages"])
+                    if count is None
+                    else min(count, len(self._database["pages"]))
+                ),
+                disable=not show_progress,
+                desc="writing summary",
+                unit="pages",
+            ):
                 fp.write(separator)
                 separator = f"{'-' * 100}\n"
 

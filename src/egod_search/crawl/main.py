@@ -4,10 +4,11 @@ from datetime import datetime
 from anyio import Path
 from argparse import ZERO_OR_MORE, ArgumentParser, Namespace
 from asyncstdlib import islice as aislice
+from bs4 import BeautifulSoup
 from functools import wraps
 from sys import modules
+from tqdm.auto import tqdm
 from typing import Callable, Collection
-from bs4 import BeautifulSoup
 from yarl import URL
 
 from .. import VERSION
@@ -28,6 +29,7 @@ async def main(
     summary_path: Path | None,
     summary_count: int | None,
     concurrency: int,
+    show_progress: bool,
 ) -> None:
     """
     Main program.
@@ -75,41 +77,52 @@ async def main(
                             continue
                         yield response
 
-            async for response, outbound_urls in aislice(
-                crawl_ok_responses(), page_count
-            ):
-                url_str = URLStr(response.url)
-                try:
-                    mod_time = Timestamp(
-                        int(
-                            datetime.strptime(
-                                response.headers.get("Last-Modified", "")[5:],
-                                "%d %m %Y %H:%M:%S %Z",
-                            ).timestamp()
+            with tqdm(
+                total=page_count,
+                disable=not show_progress,
+                desc="crawling",
+                unit="pages",
+            ) as progress:
+                async for response, outbound_urls in aislice(
+                    crawl_ok_responses(), page_count
+                ):
+                    url_str = URLStr(response.url)
+                    try:
+                        mod_time = Timestamp(
+                            int(
+                                datetime.strptime(
+                                    response.headers.get("Last-Modified", "")[5:],
+                                    "%d %m %Y %H:%M:%S %Z",
+                                ).timestamp()
+                            )
                         )
-                    )
-                except ValueError:
-                    mod_time = None
-                html = BeautifulSoup(await response.text(), "html.parser")
+                    except ValueError:
+                        mod_time = None
+                    html = BeautifulSoup(await response.text(), "html.parser")
 
-                typed_database.index_page(
-                    typed_database.url_id(url_str),
-                    Scheme.Page(
-                        {
-                            "title": (
-                                "" if html.title is None else html.title.string or ""
-                            ),
-                            "text": html.text,
-                            "links": list(map(URLStr, outbound_urls)),
-                            "mod_time": mod_time,
-                        }
-                    ),
-                )
+                    typed_database.index_page(
+                        typed_database.url_id(url_str),
+                        Scheme.Page(
+                            {
+                                "title": (
+                                    ""
+                                    if html.title is None
+                                    else html.title.string or ""
+                                ),
+                                "text": html.text,
+                                "links": list(map(URLStr, outbound_urls)),
+                                "mod_time": mod_time,
+                            }
+                        ),
+                    )
+                    progress.update()
 
             await database.write(typed_database_val)
 
     if summary_path is not None:
-        await summary_path.write_text(typed_database.summary_s(count=summary_count))
+        await summary_path.write_text(
+            typed_database.summary_s(count=summary_count, show_progress=show_progress)
+        )
 
 
 def parser(parent: Callable[..., ArgumentParser] | None = None) -> ArgumentParser:
@@ -173,6 +186,12 @@ def parser(parent: Callable[..., ArgumentParser] | None = None) -> ArgumentParse
         default=10,
         help="maximum number of concurrent requests; default 10",
     )
+    parser.add_argument(
+        "--no-progress",
+        action="store_false",
+        dest="show_progress",
+        help="disable showing progress; default enable",
+    )
 
     @wraps(main)
     async def invoke(args: Namespace):
@@ -183,6 +202,7 @@ def parser(parent: Callable[..., ArgumentParser] | None = None) -> ArgumentParse
             summary_path=args.summary_path,
             summary_count=args.summary_count,
             concurrency=args.concurrency,
+            show_progress=args.show_progress,
         )
 
     parser.set_defaults(invoke=invoke)
