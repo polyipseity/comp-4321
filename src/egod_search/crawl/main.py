@@ -2,11 +2,11 @@
 from asyncio import gather
 from datetime import datetime
 from anyio import Path
-from argparse import ArgumentParser, Namespace
-from asyncstdlib import enumerate as aenumerate
+from argparse import ZERO_OR_MORE, ArgumentParser, Namespace
+from asyncstdlib import islice as aislice
 from functools import wraps
 from sys import modules
-from typing import Callable
+from typing import Callable, Collection
 from bs4 import BeautifulSoup
 from yarl import URL
 
@@ -19,24 +19,37 @@ from ..types import (
     URLStr,
 )
 
-_STARTING_PAGE = URL("https://cse.hkust.edu.hk/~kwtleung/COMP4321/testpage.htm")
-_DATABASE_PATH = Path("database.json")
-_RESULT_PATH = Path("spider_result.txt")
-_NUMBER_OF_PAGES = 30
 
-
-async def main() -> None:
+async def main(
+    urls: Collection[URL],
+    *,
+    page_count: int | None,
+    database_path: Path,
+    summary_path: Path | None,
+    summary_count: int | None,
+    concurrency: int,
+) -> None:
     """
     Main program.
     """
 
+    if page_count is None:
+        page_count = len(urls)
+
+    if page_count < 0:
+        raise ValueError(f"Page count must be nonnegative: {page_count}")
+    if summary_count is not None and summary_count < 0:
+        raise ValueError(f"Summary count must be nonnegative: {summary_count}")
+    if concurrency <= 0:
+        raise ValueError(f"Concurrency must be positive: {concurrency}")
+
     try:
-        async with await _DATABASE_PATH.open("xt"):
+        async with await database_path.open("xt"):
             pass
     except FileExistsError:
         pass
 
-    async with await _DATABASE_PATH.open("r+t") as database_file, Crawler() as crawler:
+    async with await database_path.open("r+t") as database_file, Crawler() as crawler:
         database = Database(database_file)
         try:
             typed_database = await database.read()
@@ -48,16 +61,13 @@ async def main() -> None:
         with typed_database.lock() as typed_database_val:
 
             async def crawl_ok_responses():
-                await crawler.enqueue(_STARTING_PAGE)
+                await crawler.enqueue_many(urls)
                 while True:
+                    # crawl pages concurrently
                     responses = await gather(
-                        crawler.crawl(),
-                        crawler.crawl(),
-                        crawler.crawl(),
-                        crawler.crawl(),
-                        crawler.crawl(),
+                        *(crawler.crawl() for _ in range(concurrency)),
                         return_exceptions=True,
-                    )  # crawl 5 pages concurrently
+                    )
                     if all(isinstance(response, TypeError) for response in responses):
                         break
                     for response in responses:
@@ -65,12 +75,9 @@ async def main() -> None:
                             continue
                         yield response
 
-            async for pages_indexed, (response, outbound_urls) in aenumerate(
-                crawl_ok_responses()
+            async for response, outbound_urls in aislice(
+                crawl_ok_responses(), page_count
             ):
-                if pages_indexed >= _NUMBER_OF_PAGES:
-                    break
-
                 url_str = URLStr(response.url)
                 try:
                     mod_time = Timestamp(
@@ -101,7 +108,8 @@ async def main() -> None:
 
             await database.write(typed_database_val)
 
-    await _RESULT_PATH.write_text(typed_database.summary_s())
+    if summary_path is not None:
+        await summary_path.write_text(typed_database.summary_s(count=summary_count))
 
 
 def parser(parent: Callable[..., ArgumentParser] | None = None) -> ArgumentParser:
@@ -124,10 +132,58 @@ def parser(parent: Callable[..., ArgumentParser] | None = None) -> ArgumentParse
         version=f"{prog} v{VERSION}",
         help="print version and exit",
     )
+    parser.add_argument(
+        "inputs",
+        action="store",
+        nargs=ZERO_OR_MORE,
+        type=URL,
+        help="initial URL(s) to be crawled",
+    )
+    parser.add_argument(
+        "-n",
+        "--page-count",
+        type=int,
+        default=None,
+        help="maximum pages to crawl; default number of inputs",
+    )
+    parser.add_argument(
+        "-d",
+        "--database-path",
+        type=Path,
+        required=True,
+        help="path to database",
+    )
+    parser.add_argument(
+        "-s",
+        "--summary-path",
+        type=Path,
+        default=None,
+        help="path to write database summary; default not write",
+    )
+    parser.add_argument(
+        "--summary-count",
+        type=int,
+        default=None,
+        help="maximum number results in summary; default all",
+    )
+    parser.add_argument(
+        "-c",
+        "--concurrency",
+        type=int,
+        default=10,
+        help="maximum number of concurrent requests; default 10",
+    )
 
     @wraps(main)
     async def invoke(args: Namespace):
-        await main()
+        await main(
+            args.inputs,
+            page_count=args.page_count,
+            database_path=args.database_path,
+            summary_path=args.summary_path,
+            summary_count=args.summary_count,
+            concurrency=args.concurrency,
+        )
 
     parser.set_defaults(invoke=invoke)
     return parser
