@@ -51,7 +51,7 @@ async def main() -> None:
         except Database.InvalidFormat:
             await database.clear()
             database_obj: object = {}
-        database_obj = Scheme.fix(database_obj)
+        database_obj = Scheme.init(database_obj)
 
         async with Crawler() as crawler:
 

@@ -96,12 +96,12 @@ class Scheme:
         """
 
     @classmethod
-    def fix(cls, obj: object) -> "Scheme.Root":
+    def init(cls, obj: object) -> "Scheme.Root":
         """
         Convert an object to the scheme format.
         """
 
-        ret = Scheme.Root(
+        ret = cls.Root(
             {
                 "url_ids": {},
                 "word_ids": {},
@@ -151,7 +151,7 @@ class Scheme:
             mod_time = int_or_def(getitem_or_def(obj, "mod_time"))
             mod_time = None if mod_time is ... else Timestamp(mod_time)
 
-            return Scheme.Page(
+            return cls.Page(
                 {
                     "title": str_or_repr(getitem_or_def(obj, "title", "")),
                     "text": text,
