@@ -1,12 +1,16 @@
 # -*- coding: UTF-8 -*-
 from contextlib import contextmanager
 from copy import copy, deepcopy
+from datetime import datetime, timezone
 from functools import partial
+from io import StringIO
+from itertools import islice
 from operator import delitem, setitem
 from re import compile
 from threading import RLock
 from types import EllipsisType
 from typing import (
+    Any,
     Iterator,
     Mapping,
     MutableMapping,
@@ -17,7 +21,14 @@ from typing import (
     overload,
 )
 
-from ._util import Transaction, getitem_or_def, int_or_def, iter_or_def, str_or_repr
+from ._util import (
+    SupportsWrite,
+    Transaction,
+    getitem_or_def,
+    int_or_def,
+    iter_or_def,
+    str_or_repr,
+)
 from .types import (
     ID,
     URLID,
@@ -427,6 +438,59 @@ class Scheme:
                     self._modify(word_positions).append(position)
                     trans.push(self._modify(word_positions).pop)
         return True
+
+    def summary(
+        self,
+        fp: SupportsWrite[str],
+        *,
+        count: int | None = None,
+        keyword_count: int | None = 10,
+        link_count: int | None = 10,
+    ) -> None:
+        """
+        Write a summary of the database to `fp`.
+
+        `count` is the number of results to return. `None` means all results.
+        `keyword_count` is the number of keywords, most frequent first, per result. `None` means all keywords.
+        `link_count` is the number of links, ordered alphabetically, per result. `None` means all links.
+        """
+        with self._lock:
+            separator = ""
+            for url_id, page in islice(self._database["pages"].items(), count):
+                fp.write(separator)
+                separator = f"{'-' * 100}\n"
+
+                fp.write(f"{page['title'] or '(no title)'}\n")
+                fp.write(f"{self._database['urls'][url_id]}\n")
+                fp.write(
+                    f"{datetime.fromtimestamp(page['mod_time'], timezone.utc).isoformat() if page['mod_time'] else '(no last modification time)'}, {len(page['text'])}\n"
+                )
+
+                fp.write(
+                    f"""{'; '.join(f'{self._database["words"][word_id]} {word_frequency}' for word_id, word_frequency in islice(
+                    sorted(
+                        self._database['forward_index'][url_id].items(),
+                        key=lambda item: item[1],
+                        reverse=True,
+                    ),
+                    keyword_count,
+                ))}\n"""
+                )
+
+                fp.write(
+                    "".join(
+                        f"{link}\n"
+                        for link in islice(sorted(page["links"]), link_count)
+                    )
+                )
+
+    def summary_s(self, *args: Any, **kwargs: Any) -> str:
+        """
+        Same as `summary`, except that it returns a string. Same options are supported.
+        """
+        io = StringIO()
+        self.summary(io, *args, **kwargs)
+        return io.getvalue()
 
     @overload
     @classmethod

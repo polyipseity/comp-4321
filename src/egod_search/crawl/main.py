@@ -1,7 +1,6 @@
 # -*- coding: UTF-8 -*-
 from asyncio import gather
 from datetime import datetime
-from itertools import islice
 from anyio import Path
 from argparse import ArgumentParser, Namespace
 from asyncstdlib import enumerate as aenumerate
@@ -102,33 +101,7 @@ async def main() -> None:
 
             await database.write(typed_database_val)
 
-    async with await _RESULT_PATH.open("wt") as result_file:
-        with typed_database.lock() as typed_database_val:
-            for url_id, page in typed_database_val["pages"].items():
-                await result_file.write(page["title"] or "(no title)")
-                await result_file.write("\n")
-                await result_file.write(typed_database_val["urls"][url_id])
-                await result_file.write("\n")
-                await result_file.write(
-                    str(page["mod_time"] or "(no modification time)")
-                )
-                await result_file.write(", ")
-                await result_file.write(
-                    str(len(page["text"])) if page["text"] else "(no text)"
-                )
-                await result_file.write("\n")
-                for word_id, frequency in islice(
-                    typed_database_val["forward_index"][url_id].items(), 10
-                ):
-                    await result_file.write(typed_database_val["words"][word_id])
-                    await result_file.write(" ")
-                    await result_file.write(str(frequency))
-                    await result_file.write("; ")
-                await result_file.write("\n")
-                for link in islice(page["links"], 10):
-                    await result_file.write(link)
-                    await result_file.write("\n")
-                await result_file.write("\n")
+    await _RESULT_PATH.write_text(typed_database.summary_s())
 
 
 def parser(parent: Callable[..., ArgumentParser] | None = None) -> ArgumentParser:

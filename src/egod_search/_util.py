@@ -1,7 +1,17 @@
 from types import TracebackType
-from typing import Callable, Iterable, Iterator, Self, Type, TypeVar
+from typing import Callable, Iterable, Iterator, Protocol, Self, Type, TypeVar
 
+_AnyStr_co = TypeVar("_AnyStr_co", str, bytes, covariant=True)
+_AnyStr_contra = TypeVar("_AnyStr_contra", str, bytes, contravariant=True)
 _T = TypeVar("_T")
+
+
+class SupportsRead(Protocol[_AnyStr_co]):
+    def read(self, /) -> _AnyStr_co: ...
+
+
+class SupportsWrite(Protocol[_AnyStr_contra]):
+    def write(self, s: _AnyStr_contra, /) -> object: ...
 
 
 class Transaction:
