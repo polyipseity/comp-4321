@@ -21,6 +21,10 @@ class Crawler:
     """
 
     __slots__ = ("_lock", "_queue", "_session", "_visited")
+    SUPPORTED_SCHEMES = frozenset({"http", "https"})
+    """
+    Supported URL schemes.
+    """
 
     class URLAlreadyVisited(Exception):
         """
@@ -69,12 +73,25 @@ class Crawler:
 
         Raises `ValueError` if the URL is invalid. Raises `URLAlreadyVisited` if the URL has already been visited.
         """
-        if url.scheme not in {"http", "https"}:
-            raise ValueError(f"Invalid URL scheme: {url}")
+        if url.scheme not in self.SUPPORTED_SCHEMES:
+            raise ValueError(f"URL with invalid scheme.", url)
         async with self._lock:
             if url in self._visited:
-                raise Crawler.URLAlreadyVisited(f"URL already visited: {url}")
+                raise Crawler.URLAlreadyVisited(f"URL already visited.", url)
             self._queue[url] = ...
+
+    async def enqueue_many(self, urls: Collection[URL]) -> None:
+        """
+        Enqueue multiple URLs to be crawled. See `enqueue`.
+        """
+        if unsupported := tuple(
+            url for url in urls if url.scheme not in self.SUPPORTED_SCHEMES
+        ):
+            raise ValueError(f"URL(s) with invalid scheme.", unsupported)
+        async with self._lock:
+            if visited := self._visited & frozenset(urls):
+                raise Crawler.URLAlreadyVisited(f"URL(s) already visited.", visited)
+            self._queue.update((url, ...) for url in urls)
 
     async def crawl(self) -> tuple[ClientResponse, Collection[URL]]:
         """
@@ -120,11 +137,9 @@ class Crawler:
         async with self._lock:
             self._visited |= frozenset(redirect.url for redirect in response.history)
             self._queue.update(
-                {
-                    outbound_url: ...
-                    for outbound_url in outbound_urls
-                    if outbound_url not in self._visited
-                }
+                (outbound_url, ...)
+                for outbound_url in outbound_urls
+                if outbound_url not in self._visited
             )
 
         return response, outbound_urls
