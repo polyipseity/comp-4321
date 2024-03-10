@@ -4,6 +4,14 @@ from sys import argv
 
 from .main import parser
 
-if __name__ == "__main__":
+
+def main():
+    """
+    Main program.
+    """
     entry = parser().parse_args(argv[1:])
     run(entry.invoke(entry))
+
+
+if __name__ == "__main__":
+    main()

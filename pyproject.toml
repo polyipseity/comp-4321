@@ -42,6 +42,9 @@ name = "egod-search" # synchronize with `__init__.py`
 readme = "README.md"
 requires-python = ">=3.11.0"
 
+[project.scripts]
+egod-crawl = "egod_search.crawl.__main__:main"
+
 [project.urls]
 repository = "https://github.com/polyipseity/comp-4321.git"
 
