@@ -1,15 +1,9 @@
 # -*- coding: UTF-8 -*-
 from copy import deepcopy
 from types import EllipsisType
-from typing import (
-    Iterator,
-    MutableMapping,
-    MutableSequence,
-    TypeVar,
-    TypedDict,
-    cast,
-)
+from typing import MutableMapping, MutableSequence, TypedDict, cast
 
+from ._util import getitem_or_def, int_or_def, iter_or_def, str_or_repr
 from .types import (
     ID,
     URLID,
@@ -23,45 +17,6 @@ from .types import (
     WordID_gen,
     WordPosition,
 )
-
-_T = TypeVar("_T")
-
-
-def _str_repr(obj: object) -> str:
-    """
-    Return `obj` as is if it is a string, otherwise `repr(obj)`.
-    """
-    return obj if isinstance(obj, str) else repr(obj)
-
-
-def _try_get(obj: object, key: object, default: object = ...) -> object:
-    """
-    Return `obj[key]` if possible, otherwise `default`.
-    """
-    try:
-        return obj[key]  # type: ignore
-    except Exception:
-        return default
-
-
-def _try_int(obj: object, default: _T = ...) -> int | _T:
-    """
-    Convert `obj` into an `int` if possible, otherwise `default`.
-    """
-    try:
-        return int(_str_repr(obj))
-    except (TypeError, ValueError):
-        return default
-
-
-def _try_iter(obj: object, default: Iterator[object] = iter(())) -> Iterator[object]:
-    """
-    Get the iterator of `obj` if possible, otherwise `default`.
-    """
-    try:
-        return iter(obj)  # type: ignore
-    except Exception:
-        return default
 
 
 class Scheme:
@@ -101,12 +56,14 @@ class Scheme:
             }
         )
 
-        cur_obj = _try_get(obj, "url_ids")
+        cur_obj = getitem_or_def(obj, "url_ids")
         cur_IDs = set[URLID]()
-        for key in _try_iter(cur_obj):
-            if (val := _try_get(cur_obj, key)) is ... or (val := _try_int(val)) is ...:
+        for key in iter_or_def(cur_obj):
+            if (val := getitem_or_def(cur_obj, key)) is ... or (
+                val := int_or_def(val)
+            ) is ...:
                 continue
-            key, val = URLStr(_str_repr(key)), URLID(ID(val))
+            key, val = URLStr(str_or_repr(key)), URLID(ID(val))
             if key in ret["url_ids"]:
                 continue
             while val in cur_IDs:
@@ -115,12 +72,14 @@ class Scheme:
             ret["url_ids"][key] = val
         valid_url_ids = cur_IDs
 
-        cur_obj = _try_get(obj, "word_ids")
+        cur_obj = getitem_or_def(obj, "word_ids")
         cur_IDs = set[WordID]()
-        for key in _try_iter(cur_obj):
-            if (val := _try_get(cur_obj, key)) is ... or (val := _try_int(val)) is ...:
+        for key in iter_or_def(cur_obj):
+            if (val := getitem_or_def(cur_obj, key)) is ... or (
+                val := int_or_def(val)
+            ) is ...:
                 continue
-            key, val = Word(_str_repr(key)), WordID(ID(val))
+            key, val = Word(str_or_repr(key)), WordID(ID(val))
             while val in cur_IDs:
                 val = WordID_gen()
             cur_IDs.add(val)
@@ -128,21 +87,21 @@ class Scheme:
         valid_word_ids = cur_IDs
 
         def fix_page(obj: object) -> Scheme.Page | EllipsisType:
-            if (cur_obj := _try_get(obj, "text")) is ...:
+            if (cur_obj := getitem_or_def(obj, "text")) is ...:
                 return ...
-            text = _str_repr(cur_obj)
+            text = str_or_repr(cur_obj)
 
-            mod_time = _try_int(_try_get(obj, "mod_time"))
+            mod_time = int_or_def(getitem_or_def(obj, "mod_time"))
             mod_time = None if mod_time is ... else Timestamp(mod_time)
 
             return Scheme.Page(
                 {
-                    "title": _str_repr(_try_get(obj, "title", "")),
+                    "title": str_or_repr(getitem_or_def(obj, "title", "")),
                     "text": text,
                     "links": list(
                         map(
                             URLStr,
-                            map(_str_repr, _try_iter(_try_get(obj, "links"))),
+                            map(str_or_repr, iter_or_def(getitem_or_def(obj, "links"))),
                         )
                     ),
                     "mod_time": mod_time,
@@ -151,54 +110,56 @@ class Scheme:
 
         def fix_key_as_url_id(key: object) -> URLID | EllipsisType:
             try:
-                return URLID(ID(int(_str_repr(key))))
+                return URLID(ID(int(str_or_repr(key))))
             except (TypeError, ValueError):
                 try:
-                    return ret["url_ids"][URLStr(_str_repr(key))]
+                    return ret["url_ids"][URLStr(str_or_repr(key))]
                 except KeyError:
                     return ...
 
         def fix_key_as_word_id(key: object) -> WordID | EllipsisType:
             try:
-                return WordID(ID(int(_str_repr(key))))
+                return WordID(ID(int(str_or_repr(key))))
             except (TypeError, ValueError):
                 try:
-                    return ret["word_ids"][Word(_str_repr(key))]
+                    return ret["word_ids"][Word(str_or_repr(key))]
                 except KeyError:
                     return ...
 
-        cur_obj = _try_get(obj, "pages")
-        for key in _try_iter(cur_obj):
+        cur_obj = getitem_or_def(obj, "pages")
+        for key in iter_or_def(cur_obj):
             if (key := fix_key_as_url_id(key)) is ... or key not in valid_url_ids:
                 continue
-            if (val := _try_get(cur_obj, key)) is ... or (val := fix_page(val)) is ...:
+            if (val := getitem_or_def(cur_obj, key)) is ... or (
+                val := fix_page(val)
+            ) is ...:
                 continue
             ret["pages"][key] = val
 
         # `forward_index` is generated from `inverted_index`
-        cur_obj = _try_get(obj, "inverted_index")
-        for key_word_id in _try_iter(cur_obj):
+        cur_obj = getitem_or_def(obj, "inverted_index")
+        for key_word_id in iter_or_def(cur_obj):
             if (
                 key_word_id := fix_key_as_word_id(key_word_id)
             ) is ... or key_word_id not in valid_word_ids:
                 continue
-            if (val_word_id := _try_get(cur_obj, key_word_id)) is ...:
+            if (val_word_id := getitem_or_def(cur_obj, key_word_id)) is ...:
                 continue
             ret["inverted_index"][key_word_id] = {}
             inverted_index_word = ret["inverted_index"][key_word_id]
-            for key_url_id in _try_iter(val_word_id):
+            for key_url_id in iter_or_def(val_word_id):
                 if (
                     key_url_id := fix_key_as_url_id(key_url_id)
                 ) is ... or key_url_id not in valid_url_ids:
                     continue
-                if (val_url_id := _try_get(val_word_id, key_url_id)) is ...:
+                if (val_url_id := getitem_or_def(val_word_id, key_url_id)) is ...:
                     continue
                 inverted_index_word[key_url_id] = (
                     inverted_index_word_URL := sorted(
                         set(
                             WordPosition(pos)
                             for pos in map(
-                                _try_int, map(_str_repr, _try_iter(val_url_id))
+                                int_or_def, map(str_or_repr, iter_or_def(val_url_id))
                             )
                             if isinstance(pos, int) and pos >= 0
                         )
