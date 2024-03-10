@@ -133,4 +133,4 @@ class Crawler:
         """
         Already visited URLs.
         """
-        return self._visited
+        return frozenset(self._visited)
