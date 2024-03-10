@@ -19,7 +19,6 @@ from ..database import Database
 from ..scheme import Scheme
 from ..types import (
     Timestamp,
-    Timestamp_NULL,
     URLID_gen,
     URLStr,
     Word,
@@ -84,7 +83,7 @@ async def main() -> None:
                             "title": "",
                             "text": "",
                             "links": [],
-                            "mod_time": Timestamp_NULL,
+                            "mod_time": None,
                         }
                     ),
                 )
@@ -98,8 +97,12 @@ async def main() -> None:
                         )
                     )
                 except ValueError:
-                    mod_time = Timestamp_NULL
-                if mod_time != Timestamp_NULL and mod_time <= page["mod_time"]:
+                    mod_time = None
+                if (
+                    mod_time is not None
+                    and page["mod_time"] is not None
+                    and mod_time <= page["mod_time"]
+                ):
                     continue
                 html = BeautifulSoup(await response.text(), "html.parser")
                 page.update(

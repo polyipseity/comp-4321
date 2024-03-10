@@ -14,7 +14,6 @@ from .types import (
     ID,
     URLID,
     Timestamp,
-    Timestamp_NULL,
     URLID_gen,
     URLStr,
     URLStr_,
@@ -84,7 +83,7 @@ class Scheme:
         title: str
         text: str
         links: MutableSequence[URLStr_]
-        mod_time: Timestamp
+        mod_time: Timestamp | None
 
     @classmethod
     def fix(cls, obj: object) -> "Scheme.Database":
@@ -133,6 +132,9 @@ class Scheme:
                 return ...
             text = _str_repr(cur_obj)
 
+            mod_time = _try_int(_try_get(obj, "mod_time"))
+            mod_time = None if mod_time is ... else Timestamp(mod_time)
+
             return Scheme.Page(
                 {
                     "title": _str_repr(_try_get(obj, "title", "")),
@@ -143,9 +145,7 @@ class Scheme:
                             map(_str_repr, _try_iter(_try_get(obj, "links"))),
                         )
                     ),
-                    "mod_time": Timestamp(
-                        _try_int(_try_get(obj, "mod_time"), Timestamp_NULL)
-                    ),
+                    "mod_time": mod_time,
                 }
             )
 

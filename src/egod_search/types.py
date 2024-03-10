@@ -42,12 +42,6 @@ if not TYPE_CHECKING:
         raise TypeError("Use `URLStr` instead to create me.")
 
 
-Timestamp_NULL = Timestamp(-1)
-"""
-Timestamp representing no timestamp.
-"""
-
-
 def URLStr(_x: str | URL) -> _URLStr:
     """
     Create a normalized URL string.
