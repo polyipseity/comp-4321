@@ -3,7 +3,15 @@ from asyncio import Lock
 from types import EllipsisType, TracebackType
 from aiohttp import ClientResponse, ClientSession
 from bs4 import BeautifulSoup, SoupStrainer, Tag
-from typing import AbstractSet, Collection, MutableMapping, MutableSet, Sequence, Type
+from typing import (
+    AbstractSet,
+    Collection,
+    MutableMapping,
+    MutableSet,
+    Self,
+    Sequence,
+    Type,
+)
 from yarl import URL
 
 
@@ -31,7 +39,7 @@ class Crawler:
 
         self._session = ClientSession()
 
-    async def __aenter__(self) -> "Crawler":
+    async def __aenter__(self) -> Self:
         """
         Use this crawler as a context manager.
         """
