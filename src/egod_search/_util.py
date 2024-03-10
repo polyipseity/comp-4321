@@ -1,5 +1,5 @@
 from types import TracebackType
-from typing import Callable, Iterator, Self, Type, TypeVar
+from typing import Callable, Iterable, Iterator, Self, Type, TypeVar
 
 _T = TypeVar("_T")
 
@@ -9,13 +9,14 @@ class Transaction:
     Context manager that supports rollback on exceptions.
     """
 
-    __slots__ = ("_callables",)
+    __slots__ = ("_callables", "_parent")
 
-    def __init__(self) -> None:
+    def __init__(self, parent: Self | None = None) -> None:
         """
         Initialize a transaction.
         """
         self._callables = list[Callable[[], object]]()
+        self._parent = parent
 
     def __enter__(self) -> Self:
         """
@@ -23,7 +24,7 @@ class Transaction:
         """
         return self
 
-    def __aexit__(
+    def __exit__(
         self,
         exc_type: Type[BaseException] | None,
         exc_val: BaseException | None,
@@ -44,12 +45,20 @@ class Transaction:
                 raise exc_val from ExceptionGroup(
                     "Exception(s) occurred while rolling back.", exceptions
                 )
+        if self._parent is not None:
+            self._parent.push_many(self._callables)
 
     def push(self, callable: Callable[[], object]) -> None:
         """
         Add a rollbacker.
         """
         self._callables.append(callable)
+
+    def push_many(self, callables: Iterable[Callable[[], object]]) -> None:
+        """
+        Add many rollbackers.
+        """
+        self._callables.extend(callables)
 
 
 def getitem_or_def(obj: object, key: object, default: object = ...) -> object:
