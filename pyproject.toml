@@ -32,6 +32,7 @@ dependencies = [
 	"asyncstdlib>=3.12.0", # async utilities
 	"beautifulsoup4>=4.12.0", # parse HTML
 	"tqdm>=4.66.0", # progress bar
+	"pyinstaller>=6.5.0", # build a native executable
 	"yarl>=1.9.0", # URL utilities
 ]
 description = "HKUST COMP 4321 sources dropped from heaven by E God himself!"
@@ -43,6 +44,7 @@ readme = "README.md"
 requires-python = ">=3.11.0"
 
 [project.scripts]
+egod-search-build = "egod_search._build:main"
 egod-search-crawl = "egod_search.crawl.__main__:main"
 
 [project.urls]
