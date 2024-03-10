@@ -19,7 +19,7 @@ class Crawler:
         Exception for enqueueing an already visited URL.
         """
 
-        pass
+        __slots__ = ()
 
     def __init__(self) -> None:
         self._lock = Lock()

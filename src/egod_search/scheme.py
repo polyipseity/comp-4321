@@ -20,6 +20,8 @@ from .types import (
 
 
 class Scheme:
+    __slots__ = ()
+
     class Database(TypedDict):
         url_ids: MutableMapping[URLStr_, URLID]
         word_ids: MutableMapping[Word, WordID]

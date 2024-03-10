@@ -16,6 +16,8 @@ class Database:
         Exception for invalid object format or database format.
         """
 
+        __slots__ = ()
+
     def __init__(self, io: AsyncFile[str]) -> None:
         """
         Create a database with `io` as the underlying storage.
