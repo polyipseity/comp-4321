@@ -1,6 +1,55 @@
-from typing import Iterator, TypeVar
+from types import TracebackType
+from typing import Callable, Iterator, Self, Type, TypeVar
 
 _T = TypeVar("_T")
+
+
+class Transaction:
+    """
+    Context manager that supports rollback on exceptions.
+    """
+
+    __slots__ = ("_callables",)
+
+    def __init__(self) -> None:
+        """
+        Initialize a transaction.
+        """
+        self._callables = list[Callable[[], object]]()
+
+    def __enter__(self) -> Self:
+        """
+        Start a transaction.
+        """
+        return self
+
+    def __aexit__(
+        self,
+        exc_type: Type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> None:
+        """
+        Finish a transaction, rolling back if an exception occurred.
+        """
+        if exc_val is not None:
+            exceptions = list[Exception]()
+            while self._callables:
+                callable = self._callables.pop()
+                try:
+                    callable()
+                except Exception as exc:
+                    exceptions.append(exc)
+            if exceptions:
+                raise exc_val from ExceptionGroup(
+                    "Exception(s) occurred while rolling back.", exceptions
+                )
+
+    def push(self, callable: Callable[[], object]) -> None:
+        """
+        Add a rollbacker.
+        """
+        self._callables.append(callable)
 
 
 def getitem_or_def(obj: object, key: object, default: object = ...) -> object:
