@@ -43,7 +43,7 @@ readme = "README.md"
 requires-python = ">=3.11.0"
 
 [project.scripts]
-egod-crawl = "egod_search.crawl.__main__:main"
+egod-search-crawl = "egod_search.crawl.__main__:main"
 
 [project.urls]
 repository = "https://github.com/polyipseity/comp-4321.git"
