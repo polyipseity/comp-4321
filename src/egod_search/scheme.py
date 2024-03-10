@@ -25,7 +25,7 @@ class Scheme:
 
     __slots__ = ()
 
-    class Database(TypedDict):
+    class Root(TypedDict):
         """
         Database root scheme.
         """
@@ -96,12 +96,12 @@ class Scheme:
         """
 
     @classmethod
-    def fix(cls, obj: object) -> "Scheme.Database":
+    def fix(cls, obj: object) -> "Scheme.Root":
         """
         Convert an object to the scheme format.
         """
 
-        ret = Scheme.Database(
+        ret = Scheme.Root(
             {
                 "url_ids": {},
                 "word_ids": {},
