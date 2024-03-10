@@ -16,9 +16,10 @@ class Database:
         Exception for invalid object format or database format.
         """
 
-        pass
-
     def __init__(self, io: AsyncFile[str]) -> None:
+        """
+        Create a database with `io` as the underlying storage.
+        """
         self._lock = Lock()
         self._io = io
 
@@ -55,7 +56,7 @@ class Database:
         Raises `InvalidFormat` if the object is not serializable.
         """
         try:
-            text = dumps(obj, indent=2) # // evnchn: make the database readable
+            text = dumps(obj, indent=2)  # evnchn: make the database readable
         except (TypeError, ValueError) as exc:
             raise Database.InvalidFormat(f"Object is not serializable: {obj}") from exc
 
