@@ -27,20 +27,24 @@ from ..types import (
     WordPosition,
 )
 
-starting_page = URL("https://cse.hkust.edu.hk/~kwtleung/COMP4321/testpage.htm")
-database_path = Path("database.json")
-result_path = Path("spider_result.txt")
-number_of_pages = 30
-word_regex = compile(r"[a-zA-Z0-9\-_]+")
+_STARTING_PAGE = URL("https://cse.hkust.edu.hk/~kwtleung/COMP4321/testpage.htm")
+_DATABASE_PATH = Path("database.json")
+_RESULT_PATH = Path("spider_result.txt")
+_NUMBER_OF_PAGES = 30
+_WORD_REGEX = compile(r"[a-zA-Z0-9\-_]+")
 
 
 async def main() -> None:
+    """
+    Main program.
+    """
+
     try:
-        async with await database_path.open("xt"):
+        async with await _DATABASE_PATH.open("xt"):
             pass
     except FileExistsError:
         pass
-    async with await database_path.open("r+t") as database_file:
+    async with await _DATABASE_PATH.open("r+t") as database_file:
         database = Database(database_file)
         try:
             database_obj = await database.read()
@@ -52,7 +56,7 @@ async def main() -> None:
         async with Crawler() as crawler:
 
             async def crawl_ok_responses():
-                await crawler.enqueue(starting_page)
+                await crawler.enqueue(_STARTING_PAGE)
                 while True:
                     responses = await gather(
                         crawler.crawl(),
@@ -72,7 +76,7 @@ async def main() -> None:
             async for pages_indexed, (response, outbound_urls) in aenumerate(
                 crawl_ok_responses()
             ):
-                if pages_indexed >= number_of_pages:
+                if pages_indexed >= _NUMBER_OF_PAGES:
                     break
                 url_str = URLStr(response.url)
                 url_id = database_obj["url_ids"].setdefault(url_str, URLID_gen())
@@ -116,7 +120,7 @@ async def main() -> None:
                 forward_index_page = database_obj["forward_index"].setdefault(
                     url_id, {}
                 )
-                for match in word_regex.finditer(html.text):
+                for match in _WORD_REGEX.finditer(html.text):
                     position, word = WordPosition(match.start()), Word(match[0])
                     word_id = database_obj["word_ids"].setdefault(word, WordID_gen())
 
@@ -139,7 +143,7 @@ async def main() -> None:
 
         await database.write(database_obj)
 
-    async with await result_path.open("wt") as result_file:
+    async with await _RESULT_PATH.open("wt") as result_file:
         for url_id, page in database_obj["pages"].items():
             await result_file.write(page["title"] or "(no title)")
             await result_file.write("\n")
@@ -166,6 +170,10 @@ async def main() -> None:
 
 
 def parser(parent: Callable[..., ArgumentParser] | None = None) -> ArgumentParser:
+    """
+    Create an argument parser suitable for the main program. Pass a parser as `parent` to make this a subparser.
+    """
+
     prog = modules[__name__].__package__ or __name__
     parser = (ArgumentParser if parent is None else parent)(
         prog=f"python -m {prog}",

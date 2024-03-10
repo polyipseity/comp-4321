@@ -22,6 +22,9 @@ class Crawler:
         __slots__ = ()
 
     def __init__(self) -> None:
+        """
+        Create a crawler.
+        """
         self._lock = Lock()
         self._queue: MutableMapping[URL, EllipsisType] = {}
         self._visited: MutableSet[URL] = set()
@@ -29,6 +32,9 @@ class Crawler:
         self._session = ClientSession()
 
     async def __aenter__(self) -> "Crawler":
+        """
+        Use this crawler as a context manager.
+        """
         await self._session.__aenter__()
         return self
 
@@ -38,6 +44,9 @@ class Crawler:
         exc_val: BaseException | None,
         exc_tb: TracebackType | None,
     ) -> None:
+        """
+        Cleanup the crawler as a context manager.
+        """
         await self.aclose()
 
     async def aclose(self) -> None:
@@ -115,13 +124,13 @@ class Crawler:
     @property
     def queue(self) -> Sequence[URL]:
         """
-        urls to be visited.
+        URLs to be visited.
         """
         return tuple(self._queue)
 
     @property
     def visited(self) -> AbstractSet[URL]:
         """
-        Already visited urls.
+        Already visited URLs.
         """
         return self._visited
