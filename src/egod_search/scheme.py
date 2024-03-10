@@ -234,9 +234,10 @@ class Scheme:
 
         cur_obj = getitem_or_def(obj, "pages")
         for key in iter_or_def(cur_obj):
+            key0 = key
             if (key := fix_key_as_url_id(key)) is ... or key not in ret["urls"]:
                 continue
-            if (val := getitem_or_def(cur_obj, key)) is ... or (
+            if (val := getitem_or_def(cur_obj, key0)) is ... or (
                 val := fix_page(val)
             ) is ...:
                 continue
@@ -245,19 +246,21 @@ class Scheme:
         # initialize `inverted_index` and `forward_index`
         cur_obj = getitem_or_def(obj, "inverted_index")
         for key_word_id in iter_or_def(cur_obj):
+            key_word_id0 = key_word_id
             if (
                 key_word_id := fix_key_as_word_id(key_word_id)
             ) is ... or key_word_id not in ret["words"]:
                 continue
-            if (val_word_id := getitem_or_def(cur_obj, key_word_id)) is ...:
+            if (val_word_id := getitem_or_def(cur_obj, key_word_id0)) is ...:
                 continue
             inverted_index_word = ret["inverted_index"][key_word_id]
             for key_url_id in iter_or_def(val_word_id):
+                key_url_id0 = key_url_id
                 if (
                     key_url_id := fix_key_as_url_id(key_url_id)
                 ) is ... or key_url_id not in ret["urls"]:
                     continue
-                if (val_url_id := getitem_or_def(val_word_id, key_url_id)) is ...:
+                if (val_url_id := getitem_or_def(val_word_id, key_url_id0)) is ...:
                     continue
                 inverted_index_word_URL = sorted(
                     set(
