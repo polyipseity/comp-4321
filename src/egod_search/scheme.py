@@ -22,15 +22,7 @@ from typing import (
     overload,
 )
 
-from ._util import (
-    SupportsWrite,
-    Transaction,
-    getitem_or_def,
-    int_or_def,
-    iter_or_def,
-    str_or_repr,
-)
-from .types import (
+from .scheme_types import (
     ID,
     URLID,
     Timestamp,
@@ -42,6 +34,14 @@ from .types import (
     WordID,
     WordID_gen,
     WordPosition,
+)
+from ._util import (
+    SupportsWrite,
+    Transaction,
+    getitem_or_def,
+    int_or_def,
+    iter_or_def,
+    str_or_repr,
 )
 
 _T = TypeVar("_T")

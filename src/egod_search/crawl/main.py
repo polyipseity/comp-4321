@@ -15,10 +15,7 @@ from .. import VERSION
 from ..crawl import Crawler
 from ..database import Database
 from ..scheme import Scheme
-from ..types import (
-    Timestamp,
-    URLStr,
-)
+from ..scheme_types import Timestamp, URLStr
 
 
 async def main(
