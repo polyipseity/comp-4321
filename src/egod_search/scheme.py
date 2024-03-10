@@ -1,7 +1,6 @@
 # -*- coding: UTF-8 -*-
-from copy import deepcopy
 from types import EllipsisType
-from typing import MutableMapping, MutableSequence, TypedDict, cast
+from typing import MutableMapping, MutableSequence, TypedDict
 
 from ._util import getitem_or_def, int_or_def, iter_or_def, str_or_repr
 from .types import (
@@ -34,7 +33,13 @@ class Scheme:
                 URLID, MutableSequence[WordPosition]
             ],  # positions are unique and sorted
         ]
-        forward_index: MutableMapping[URLID, MutableMapping[WordID, WordFrequency]]
+
+        # computed data
+        forward_index: MutableMapping[
+            URLID, MutableMapping[WordID, WordFrequency]
+        ]  # `forward_index` is computed from `inverted_index`
+        urls: MutableMapping[URLID, URLStr_]  # `urls` is computed from `url_ids`
+        words: MutableMapping[WordID, Word]  # `words` is computed from `word_ids`
 
     class Page(TypedDict):
         title: str
@@ -55,6 +60,8 @@ class Scheme:
                 "pages": {},
                 "inverted_index": {},
                 "forward_index": {},
+                "urls": {},
+                "words": {},
             }
         )
 
@@ -138,7 +145,8 @@ class Scheme:
                 continue
             ret["pages"][key] = val
 
-        # `forward_index` is generated from `inverted_index`
+        # computed data
+
         cur_obj = getitem_or_def(obj, "inverted_index")
         for key_word_id in iter_or_def(cur_obj):
             if (
@@ -171,18 +179,7 @@ class Scheme:
                     len(inverted_index_word_URL)
                 )
 
-        return ret
+        ret["urls"].update({val: key for key, val in ret["url_ids"].items()})
+        ret["words"].update({val: key for key, val in ret["word_ids"].items()})
 
-    class HydratedDatabase(Database):
-        urls: MutableMapping[URLID, URLStr_]
-        words: MutableMapping[WordID, Word]
-
-    @classmethod
-    def hydrate(cls, scheme: "Scheme.Database") -> "Scheme.HydratedDatabase":
-        """
-        Copy and hydrate the scheme object.
-        """
-        ret = cast(Scheme.HydratedDatabase, deepcopy(scheme))
-        ret["urls"] = {val: key for key, val in ret["url_ids"].items()}
-        ret["words"] = {val: key for key, val in ret["word_ids"].items()}
         return ret

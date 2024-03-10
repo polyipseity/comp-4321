@@ -139,7 +139,6 @@ async def main() -> None:
 
         await database.write(database_obj)
 
-    database_obj = Scheme.hydrate(database_obj)
     async with await result_path.open("wt") as result_file:
         for url_id, page in database_obj["pages"].items():
             await result_file.write(page["title"] or "(no title)")
