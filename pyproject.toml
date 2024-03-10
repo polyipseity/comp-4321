@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 authors = [
-	{name = "E God (evnchn)", email = "37951241+evnchn@users.noreply.github.com"},
+	{name = "E God (evnchn)"},
 	{name = "Happypig375", email = "hadrianwttang@outlook.com"},
 	{name = "polyipseity", email = "polyipseity@gmail.com"},
 ]
