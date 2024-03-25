@@ -36,63 +36,6 @@ class SupportsWrite(Protocol[_AnyStr_contra]):
         ...
 
 
-class Transaction:
-    """
-    Context manager that supports rollback on exceptions.
-    """
-
-    __slots__ = ("_callables", "_parent")
-
-    def __init__(self, parent: Self | None = None) -> None:
-        """
-        Initialize a transaction.
-        """
-        self._callables = list[Callable[[], object]]()
-        self._parent = parent
-
-    def __enter__(self) -> Self:
-        """
-        Start a transaction.
-        """
-        return self
-
-    def __exit__(
-        self,
-        exc_type: Type[BaseException] | None,
-        exc_val: BaseException | None,
-        exc_tb: TracebackType | None,
-    ) -> None:
-        """
-        Finish a transaction, rolling back if an exception occurred.
-        """
-        if exc_val is not None:
-            exceptions = list[Exception]()
-            while self._callables:
-                callable = self._callables.pop()
-                try:
-                    callable()
-                except Exception as exc:
-                    exceptions.append(exc)
-            if exceptions:
-                raise exc_val from ExceptionGroup(
-                    "Exception(s) occurred while rolling back", exceptions
-                )
-        if self._parent is not None:
-            self._parent.push_many(self._callables)
-
-    def push(self, callable: Callable[[], object]) -> None:
-        """
-        Add a rollbacker.
-        """
-        self._callables.append(callable)
-
-    def push_many(self, callables: Iterable[Callable[[], object]]) -> None:
-        """
-        Add many rollbackers.
-        """
-        self._callables.extend(callables)
-
-
 @asynccontextmanager
 async def a_begin(conn: Connection, child: bool):
     if child:
