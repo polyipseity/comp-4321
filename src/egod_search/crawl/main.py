@@ -1,6 +1,7 @@
 # -*- coding: UTF-8 -*-
 from asyncio import gather
 from datetime import datetime
+from aiosqlite import connect
 from anyio import Path
 from argparse import ZERO_OR_MORE, ArgumentParser, Namespace
 from asyncstdlib import islice as aislice
@@ -13,9 +14,7 @@ from yarl import URL
 
 from .. import VERSION
 from ..crawl import Crawler
-from ..database import Database
 from ..scheme import Scheme
-from ..scheme_types import Timestamp, URLStr
 
 
 async def main(
@@ -48,78 +47,68 @@ async def main(
     except FileExistsError:
         pass
 
-    async with await database_path.open("r+t") as database_file, Crawler() as crawler:
-        database = Database(database_file)
-        try:
-            typed_database = await database.read()
-        except Database.InvalidFormat:
-            await database.clear()
-            typed_database: object = {}
-        typed_database = Scheme(Scheme.init(typed_database))
+    async with (
+        Scheme(connect(database_path.__fspath__())) as database,
+        Crawler() as crawler,
+    ):
 
-        with typed_database.lock() as typed_database_val:
+        async def crawl_ok_responses():
+            await crawler.enqueue_many(urls)
+            while True:
+                # crawl pages concurrently
+                responses = await gather(
+                    *(crawler.crawl() for _ in range(concurrency)),
+                    return_exceptions=True,
+                )
+                if all(isinstance(response, TypeError) for response in responses):
+                    break
+                for response in responses:
+                    if not isinstance(response, tuple) or not response[0].ok:
+                        continue
+                    yield response
 
-            async def crawl_ok_responses():
-                await crawler.enqueue_many(urls)
-                while True:
-                    # crawl pages concurrently
-                    responses = await gather(
-                        *(crawler.crawl() for _ in range(concurrency)),
-                        return_exceptions=True,
+        with tqdm(
+            total=page_count,
+            disable=not show_progress,
+            desc="crawling",
+            unit="pages",
+        ) as progress:
+            async for response, outbound_urls in aislice(
+                crawl_ok_responses(), page_count
+            ):
+                url = response.url
+                try:
+                    mod_time = int(
+                        datetime.strptime(
+                            response.headers.get("Last-Modified", "")[5:],
+                            "%d %m %Y %H:%M:%S %Z",
+                        ).timestamp()
                     )
-                    if all(isinstance(response, TypeError) for response in responses):
-                        break
-                    for response in responses:
-                        if not isinstance(response, tuple) or not response[0].ok:
-                            continue
-                        yield response
-
-            with tqdm(
-                total=page_count,
-                disable=not show_progress,
-                desc="crawling",
-                unit="pages",
-            ) as progress:
-                async for response, outbound_urls in aislice(
-                    crawl_ok_responses(), page_count
-                ):
-                    url_str = URLStr(response.url)
-                    try:
-                        mod_time = Timestamp(
-                            int(
-                                datetime.strptime(
-                                    response.headers.get("Last-Modified", "")[5:],
-                                    "%d %m %Y %H:%M:%S %Z",
-                                ).timestamp()
-                            )
-                        )
-                    except ValueError:
-                        mod_time = None
-                    html = BeautifulSoup(await response.text(), "html.parser")
-
-                    typed_database.index_page(
-                        typed_database.url_id(url_str),
-                        Scheme.Page(
-                            {
-                                "title": (
-                                    ""
-                                    if html.title is None
-                                    else html.title.string or ""
-                                ),
-                                "text": html.text,
-                                "links": list(map(URLStr, outbound_urls)),
-                                "mod_time": mod_time,
-                            }
-                        ),
-                    )
-                    progress.update()
-
-            await database.write(typed_database_val)
-
-    if summary_path is not None:
-        await summary_path.write_text(
-            typed_database.summary_s(count=summary_count, show_progress=show_progress)
-        )
+                except ValueError:
+                    mod_time = None
+                text = await response.text()
+                html = BeautifulSoup(text, "html.parser")
+                await database.index_page(
+                    Scheme.Page(
+                        url=url,
+                        title="" if html.title is None else html.title.string or "",
+                        text=text,
+                        plaintext=html.text,
+                        links=frozenset(outbound_urls),
+                        mod_time=mod_time,
+                    ),
+                    child=True,
+                )
+                progress.update()
+        await database.conn.commit()
+        if summary_path is not None:
+            await summary_path.write_text(
+                await database.summary_s(
+                    count=summary_count,
+                    show_progress=show_progress,
+                    child=True,
+                )
+            )
 
 
 def parser(parent: Callable[..., ArgumentParser] | None = None) -> ArgumentParser:

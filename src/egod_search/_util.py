@@ -1,5 +1,7 @@
+from contextlib import asynccontextmanager
+from aiosqlite import Connection
 from types import TracebackType
-from typing import Callable, Iterable, Iterator, Protocol, Self, Type, TypeVar
+from typing import Any, Callable, Iterable, Iterator, Protocol, Self, Type, TypeVar
 
 _AnyStr_co = TypeVar("_AnyStr_co", str, bytes, covariant=True)
 _AnyStr_contra = TypeVar("_AnyStr_contra", str, bytes, contravariant=True)
@@ -89,6 +91,24 @@ class Transaction:
         Add many rollbackers.
         """
         self._callables.extend(callables)
+
+
+@asynccontextmanager
+async def a_begin(conn: Connection, child: bool):
+    if child:
+        yield conn
+        return
+    async with conn:
+        yield conn
+
+
+async def a_fetch_one(conn: Connection, *args: Any):
+    return await (await conn.execute(*args)).fetchone()
+
+
+async def a_fetch_value(conn: Connection, *args: Any, default: Any = None) -> Any:
+    ret = await a_fetch_one(conn, *args)
+    return default if ret is None else ret[0]
 
 
 def getitem_or_def(obj: object, key: object, default: object = ...) -> object:
