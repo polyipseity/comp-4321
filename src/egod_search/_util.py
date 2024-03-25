@@ -7,11 +7,31 @@ _T = TypeVar("_T")
 
 
 class SupportsRead(Protocol[_AnyStr_co]):
-    def read(self, /) -> _AnyStr_co: ...
+    """
+    Supports reading.
+    """
+
+    __slots__ = ()
+
+    def read(self, /) -> _AnyStr_co:
+        """
+        Read a string.
+        """
+        ...
 
 
 class SupportsWrite(Protocol[_AnyStr_contra]):
-    def write(self, s: _AnyStr_contra, /) -> object: ...
+    """
+    Supports writing.
+    """
+
+    __slots__ = ()
+
+    def write(self, s: _AnyStr_contra, /) -> object:
+        """
+        Write a string.
+        """
+        ...
 
 
 class Transaction:
