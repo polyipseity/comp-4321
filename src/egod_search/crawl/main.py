@@ -99,8 +99,9 @@ async def main(
                     ),
                     child=True,
                 )
+                await database.conn.commit()
                 progress.update()
-        await database.conn.commit()
+
         if summary_path is not None:
             await summary_path.write_text(
                 await database.summary_s(

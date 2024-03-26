@@ -83,8 +83,7 @@ class Scheme:
         async with a_begin(self._conn, child) as conn:
             await conn.execute(
                 """
-INSERT INTO main.urls(content) VALUES(?)
-ON CONFLICT(content) DO NOTHING""",
+INSERT OR IGNORE INTO main.urls(content) VALUES(?)""",
                 (xx,),
             )
             return await a_fetch_value(
@@ -101,8 +100,7 @@ SELECT rowid FROM main.urls WHERE content = ?""",
         async with a_begin(self._conn, child) as conn:
             await conn.execute(
                 """
-INSERT INTO main.words(content) VALUES(?)
-ON CONFLICT(content) DO NOTHING""",
+INSERT OR IGNORE INTO main.words(content) VALUES(?)""",
                 (_x,),
             )
             return await a_fetch_value(
@@ -164,13 +162,7 @@ SELECT mod_time FROM main.pages WHERE rowid = ?""",
 
             await conn.execute(
                 """
-INSERT INTO main.pages(rowid, mod_time, text, plaintext, title, links) VALUES(?, ?, ?, ?, ?, ?)
-ON CONFLICT(rowid) DO UPDATE SET
-    mod_time = excluded.mod_time,
-    text = excluded.text,
-    plaintext = excluded.plaintext,
-    title = excluded.title,
-    links = excluded.links""",
+INSERT OR REPLACE INTO main.pages(rowid, mod_time, text, plaintext, title, links) VALUES(?, ?, ?, ?, ?, ?)""",
                 (
                     url_id,
                     _x.mod_time,
