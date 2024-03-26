@@ -4,6 +4,7 @@ CREATE TABLE IF NOT EXISTS main.urls (
   content TEXT NOT NULL UNIQUE,
   redirect INTEGER REFERENCES urls(rowid) ON UPDATE CASCADE ON DELETE RESTRICT
 ) STRICT;
+CREATE INDEX IF NOT EXISTS main.urls_content_index ON urls (content ASC);
 DROP TRIGGER IF EXISTS main.update_urls;
 CREATE TRIGGER main.update_urls BEFORE
 UPDATE OF rowid ON main.urls FOR EACH ROW BEGIN
@@ -36,6 +37,7 @@ CREATE TABLE IF NOT EXISTS main.words (
   rowid INTEGER NOT NULL PRIMARY KEY,
   content TEXT NOT NULL UNIQUE
 ) STRICT;
+CREATE INDEX IF NOT EXISTS main.words_content_index ON words (content ASC);
 -- main.pages
 CREATE TABLE IF NOT EXISTS main.pages (
   rowid INTEGER NOT NULL PRIMARY KEY REFERENCES urls(rowid) ON UPDATE CASCADE ON DELETE RESTRICT,
@@ -55,4 +57,3 @@ CREATE TABLE IF NOT EXISTS main.word_occurrences (
   PRIMARY KEY (page, word)
 ) STRICT,
 WITHOUT ROWID;
-CREATE INDEX IF NOT EXISTS main.word_indices ON word_occurrences (page ASC, word ASC);
