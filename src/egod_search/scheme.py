@@ -305,11 +305,18 @@ LIMIT ?""",
                                 f"{word[words_keys.index('main.words.content')]} {word[words_keys.index('main.word_occurrences.frequency')]}"
                             )
                     fp.write("\n")
-                    for link in islice(
-                        sorted(loads(page[pages_keys.index("main.pages.links")])),
-                        link_count,
-                    ):
-                        fp.write(f"{link}\n")
+                    links = loads(page[pages_keys.index("main.pages.links")])
+                    async with self._conn.execute_fetchall(
+                        f"""
+SELECT content
+FROM main.urls
+WHERE rowid IN ({', '.join('?' * len(links))})
+ORDER BY content
+LIMIT ?""",
+                        (*links, link_count),
+                    ) as links:
+                        fp.write("\n".join(link[0] for link in links))
+                    fp.write("\n")
                     progress.update()
 
     async def summary_s(self, *args: Any, **kwargs: Any) -> str:
