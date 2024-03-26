@@ -45,14 +45,14 @@ CREATE TABLE IF NOT EXISTS main.pages (
   text TEXT NOT NULL,
   plaintext TEXT NOT NULL,
   title TEXT NOT NULL,
-  links TEXT NOT NULL CHECK(json_valid(links) & 3) -- type: JSON
+  links TEXT NOT NULL CHECK(json_valid(links) & 3) -- type: JSON, list of urls(rowid)
 ) STRICT;
 -- main.word_occurrences
 CREATE TABLE IF NOT EXISTS main.word_occurrences (
   page_id INTEGER NOT NULL REFERENCES pages(rowid) ON UPDATE CASCADE ON DELETE RESTRICT,
   word_id INTEGER NOT NULL REFERENCES words(rowid) ON UPDATE CASCADE ON DELETE RESTRICT,
   positions TEXT NOT NULL CHECK(json_valid(positions) & 3),
-  -- type: JSON
+  -- type: JSON, list of integers
   frequency INTEGER NOT NULL GENERATED ALWAYS AS (json_array_length(positions)) STORED,
   PRIMARY KEY (page_id, word_id)
 ) STRICT,
