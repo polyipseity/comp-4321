@@ -34,7 +34,7 @@ class Scheme:
     __slots__ = ("_conn", "_own_conn")
 
     CREATE_TABLES_SCRIPT = (
-        files(__package__ or "") / "scheme" / "create_tables.sql"
+        files(__package__ or "") / "scheme" / "create_database.sql"
     ).read_text()
     """
     Script to create tables.
