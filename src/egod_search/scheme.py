@@ -1,13 +1,14 @@
+from collections import defaultdict
 from dataclasses import dataclass
 from aiosqlite import Connection
 from datetime import datetime, timezone
 from importlib.resources import files
 from io import StringIO
-from itertools import islice
+from itertools import chain, islice
 from json import dumps, loads
 from re import compile
 from types import TracebackType
-from typing import AbstractSet, Any, NewType, Self, Type
+from typing import AbstractSet, Any, MutableSequence, NewType, Self, Sequence, Type
 from tqdm.auto import tqdm
 from yarl import URL
 
@@ -75,40 +76,63 @@ class Scheme:
         if self._own_conn:
             await self._conn.__aexit__(exc_type, exc_val, exc_tb)  # type: ignore
 
-    async def url_id(self, _x: URL, /, child: bool = False) -> URLID:
+    async def url_ids(
+        self, contents: Sequence[URL], /, child: bool = False
+    ) -> Sequence[URLID]:
         """
-        Get the URL ID for a url. Assigns a new ID if not already assigned.
+        Get IDs for URLs. Assigns new IDs if not already assigned.
         """
-        xx = str(_x)
+        vals = tuple(map(str, contents))
         async with a_begin(self._conn, child) as conn:
             await conn.execute(
-                """
-INSERT OR IGNORE INTO main.urls(content) VALUES(?)""",
-                (xx,),
+                f"""
+INSERT OR IGNORE INTO main.urls(content) VALUES {', '.join(('(?)',) * len(vals))}""",
+                vals,
             )
-            return await a_fetch_value(
-                conn,
-                """
-SELECT rowid FROM main.urls WHERE content = ?""",
-                (xx,),
+            return tuple(
+                row[0]
+                for row in await conn.execute_fetchall(
+                    f"""
+SELECT rowid FROM main.urls WHERE content IN ({', '.join('?' * len(vals))})
+""",
+                    vals,
+                )
             )
 
-    async def word_id(self, _x: str, /, child: bool = False) -> WordID:
+    async def url_id(self, content: URL, /, child: bool = False) -> URLID:
         """
-        Get the URL ID for a word. Assigns a new ID if not already assigned.
+        Same as `url_ids` but for one item. Same options are supported.
         """
+        return (await self.url_ids((content,), child=child))[0]
+
+    async def word_ids(
+        self, contents: Sequence[str], /, child: bool = False
+    ) -> Sequence[WordID]:
+        """
+        Get IDs for words. Assigns new IDs if not already assigned.
+        """
+        vals = contents
         async with a_begin(self._conn, child) as conn:
             await conn.execute(
-                """
-INSERT OR IGNORE INTO main.words(content) VALUES(?)""",
-                (_x,),
+                f"""
+INSERT OR IGNORE INTO main.words(content) VALUES {', '.join(('(?)',) * len(vals))}""",
+                vals,
             )
-            return await a_fetch_value(
-                conn,
-                """
-SELECT rowid FROM main.words WHERE content = ?""",
-                (_x,),
+            return tuple(
+                row[0]
+                for row in await conn.execute_fetchall(
+                    f"""
+SELECT rowid FROM main.words WHERE content IN ({', '.join('?' * len(vals))})
+""",
+                    vals,
+                )
             )
+
+    async def word_id(self, content: str, /, child: bool = False) -> WordID:
+        """
+        Same as `word_ids` but for one item. Same options are supported.
+        """
+        return (await self.word_ids((content,), child=child))[0]
 
     @dataclass(frozen=True, kw_only=True, slots=True)
     class Page:
@@ -162,7 +186,7 @@ SELECT mod_time FROM main.pages WHERE rowid = ?""",
 
             await conn.execute(
                 """
-INSERT OR REPLACE INTO main.pages(rowid, mod_time, text, plaintext, title, links) VALUES(?, ?, ?, ?, ?, ?)""",
+INSERT OR REPLACE INTO main.pages(rowid, mod_time, text, plaintext, title, links) VALUES (?, ?, ?, ?, ?, ?)""",
                 (
                     url_id,
                     _x.mod_time,
@@ -181,15 +205,22 @@ DELETE FROM main.word_occurrences WHERE page_id = ?""",
             )
 
             # index words
+            word_matches = defaultdict[str, MutableSequence[int]](list)
             for word_match in _WORD_REGEX.finditer(_x.plaintext):
-                word, position = word_match[0], word_match.start()
-                word_id = await self.word_id(word, child=True)
-                await conn.execute(
-                    """
-INSERT INTO main.word_occurrences(page_id, word_id, positions) VALUES(?, ?, ?)
-ON CONFLICT(page_id, word_id) DO UPDATE SET positions = json_insert(positions, '$[#]', json_extract(excluded.positions, '$[0]'))""",
-                    (url_id, word_id, dumps([position])),
-                )
+                word_matches[word_match[0]].append(word_match.start())
+            word_ids = await self.word_ids(tuple(word_matches), child=True)
+            await conn.execute(
+                f"""
+INSERT INTO main.word_occurrences(page_id, word_id, positions) VALUES {', '.join(('(?, ?, ?)',) * len(word_ids))}""",
+                tuple(
+                    chain.from_iterable(
+                        (url_id, word_id, dumps(positions))
+                        for positions, word_id in zip(
+                            word_matches.values(), word_ids, strict=True
+                        )
+                    )
+                ),
+            )
         return True
 
     async def summary(
