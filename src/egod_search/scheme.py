@@ -4,7 +4,7 @@ from aiosqlite import Connection
 from datetime import datetime, timezone
 from importlib.resources import files
 from io import StringIO
-from itertools import chain, islice
+from itertools import chain
 from json import dumps, loads
 from re import compile
 from types import TracebackType
