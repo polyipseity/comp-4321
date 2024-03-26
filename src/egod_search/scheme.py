@@ -232,7 +232,6 @@ INSERT INTO main.word_occurrences(page_id, word_id, positions) VALUES (?, ?, ?)"
         `link_count` is the number of links, ordered alphabetically, per result. `None` means all links.
         `show_progress` is whether to show a progress bar.
         """
-        separator = ""
         total: int | None = await a_fetch_value(
             self._conn,
             """
@@ -241,6 +240,7 @@ SELECT count(*) FROM main.pages""",
         total = (
             count if total is None else total if count is None else min(count, total)
         )
+        separator = ""
         with tqdm(
             total=total,
             disable=not show_progress,

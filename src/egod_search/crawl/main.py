@@ -1,5 +1,5 @@
 # -*- coding: UTF-8 -*-
-from asyncio import gather
+from asyncio import TaskGroup, gather
 from datetime import datetime
 from aiosqlite import connect
 from anyio import Path
@@ -41,12 +41,6 @@ async def main(
     if concurrency <= 0:
         raise ValueError(f"Concurrency must be positive: {concurrency}")
 
-    try:
-        async with await database_path.open("xt"):
-            pass
-    except FileExistsError:
-        pass
-
     async with (
         Scheme(connect(database_path.__fspath__())) as database,
         Crawler() as crawler,
@@ -73,33 +67,35 @@ async def main(
             desc="crawling",
             unit="pages",
         ) as progress:
-            async for response, outbound_urls in aislice(
-                crawl_ok_responses(), page_count
-            ):
-                url = response.url
-                try:
-                    mod_time = int(
-                        datetime.strptime(
-                            response.headers.get("Last-Modified", "")[5:],
-                            "%d %m %Y %H:%M:%S %Z",
-                        ).timestamp()
+            async with TaskGroup() as tg:
+                async for response, outbound_urls in aislice(
+                    crawl_ok_responses(), page_count
+                ):
+                    text = tg.create_task(response.text())
+                    url = response.url
+                    try:
+                        mod_time = int(
+                            datetime.strptime(
+                                response.headers.get("Last-Modified", "")[5:],
+                                "%d %m %Y %H:%M:%S %Z",
+                            ).timestamp()
+                        )
+                    except ValueError:
+                        mod_time = None
+                    text = await text
+                    html = BeautifulSoup(text, "html.parser")
+                    await database.index_page(
+                        Scheme.Page(
+                            url=url,
+                            title="" if html.title is None else html.title.string or "",
+                            text=text,
+                            plaintext=html.text,
+                            links=frozenset(outbound_urls),
+                            mod_time=mod_time,
+                        ),
                     )
-                except ValueError:
-                    mod_time = None
-                text = await response.text()
-                html = BeautifulSoup(text, "html.parser")
-                await database.index_page(
-                    Scheme.Page(
-                        url=url,
-                        title="" if html.title is None else html.title.string or "",
-                        text=text,
-                        plaintext=html.text,
-                        links=frozenset(outbound_urls),
-                        mod_time=mod_time,
-                    ),
-                )
-                await database.conn.commit()
-                progress.update()
+                    await database.conn.commit()
+                    progress.update()
 
         if summary_path is not None:
             await summary_path.write_text(
