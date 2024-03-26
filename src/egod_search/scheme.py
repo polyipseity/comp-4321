@@ -174,7 +174,7 @@ ON CONFLICT(rowid) DO UPDATE SET
 
             # clear index
             await conn.execute(
-                "DELETE FROM main.word_occurrences WHERE page = ?", (url_id,)
+                "DELETE FROM main.word_occurrences WHERE page_id = ?", (url_id,)
             )
 
             # index words
@@ -183,8 +183,8 @@ ON CONFLICT(rowid) DO UPDATE SET
                 word_id = await self.word_id(word, child=True)
                 await conn.execute(
                     """
-INSERT INTO main.word_occurrences(page, word, positions) VALUES(?, ?, ?)
-ON CONFLICT(page, word) DO UPDATE SET positions = json_insert(positions, '$[#]', json_extract(excluded.positions, '$[0]'))""",
+INSERT INTO main.word_occurrences(page_id, word_id, positions) VALUES(?, ?, ?)
+ON CONFLICT(page_id, word_id) DO UPDATE SET positions = json_insert(positions, '$[#]', json_extract(excluded.positions, '$[0]'))""",
                     (url_id, word_id, dumps([position])),
                 )
         return True
@@ -255,13 +255,13 @@ LIMIT ?""",
                         fp.write(", ")
                         fp.write(str(len(page[pages_keys.index("text")])))
                         fp.write("\n")
-                        words_keys = ("frequency", "word")
+                        words_keys = ("frequency", "word_id")
                         async with conn.execute(
                             f"""
 SELECT {', '.join(words_keys)}
 FROM main.word_occurrences
-WHERE page = ?
-ORDER BY frequency DESC, word ASC
+WHERE page_id = ?
+ORDER BY frequency DESC, word_id ASC
 LIMIT ?""",
                             (
                                 page[pages_keys.index("rowid")],
@@ -273,7 +273,7 @@ LIMIT ?""",
                                 fp.write(word_separator)
                                 word_separator = "; "
                                 fp.write(
-                                    f'{await a_fetch_value(conn, "SELECT content FROM main.words WHERE rowid = ?", (word[words_keys.index("word")],))} {word[words_keys.index("frequency")]}'
+                                    f'{await a_fetch_value(conn, "SELECT content FROM main.words WHERE rowid = ?", (word[words_keys.index("word_id")],))} {word[words_keys.index("frequency")]}'
                                 )
                         fp.write("\n")
                         for link in islice(
