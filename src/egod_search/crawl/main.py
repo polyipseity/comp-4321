@@ -90,7 +90,7 @@ async def main(
                             title="" if html.title is None else html.title.string or "",
                             text=text,
                             plaintext=html.text,
-                            links=frozenset(outbound_urls),
+                            links=outbound_urls,
                             mod_time=mod_time,
                         ),
                     )

@@ -8,7 +8,7 @@ from itertools import chain, islice
 from json import dumps, loads
 from re import compile
 from types import TracebackType
-from typing import AbstractSet, Any, MutableSequence, NewType, Self, Sequence, Type
+from typing import Any, Collection, MutableSequence, NewType, Self, Sequence, Type
 from tqdm.auto import tqdm
 from yarl import URL
 
@@ -150,7 +150,7 @@ ORDER BY CASE content {' '.join(('WHEN ? THEN ?',) * len(vals))} END""",
         """
         Page content in plaintext. That is, without any markups.
         """
-        links: AbstractSet[URL]
+        links: Collection[URL]
         """
         Links in the page.
         """
@@ -163,7 +163,9 @@ ORDER BY CASE content {' '.join(('WHEN ? THEN ?',) * len(vals))} END""",
         """
         Index an page and return whether the page is actually indexed. Raises `ValueError` if `url_id` is invalid.
         """
-        url_and_links_id = await self.url_ids((page.url, *page.links))
+        url_and_links_id = await self.url_ids(
+            (page.url, *{link: ... for link in page.links})
+        )
         url_id = url_and_links_id[0]
         old_mod_time: int | None = await a_fetch_value(
             self._conn,
