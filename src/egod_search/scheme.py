@@ -7,7 +7,7 @@ from itertools import islice
 from json import dumps, loads
 from re import compile
 from types import TracebackType
-from typing import AbstractSet, Any, MutableSequence, NewType, Self, Type
+from typing import AbstractSet, Any, NewType, Self, Type
 from tqdm.auto import tqdm
 from yarl import URL
 
@@ -60,6 +60,7 @@ class Scheme:
         if self._own_conn:
             await self._conn.__aenter__()
         await self._conn.executescript(self.CREATE_TABLES_SCRIPT)
+        await self._conn.commit()
         return self
 
     async def __aexit__(
@@ -87,7 +88,10 @@ ON CONFLICT(content) DO NOTHING""",
                 (xx,),
             )
             return await a_fetch_value(
-                conn, "SELECT rowid FROM main.urls WHERE content = ?", (xx,)
+                conn,
+                """
+SELECT rowid FROM main.urls WHERE content = ?""",
+                (xx,),
             )
 
     async def word_id(self, _x: str, /, child: bool = False) -> WordID:
@@ -102,7 +106,10 @@ ON CONFLICT(content) DO NOTHING""",
                 (_x,),
             )
             return await a_fetch_value(
-                conn, "SELECT rowid FROM main.words WHERE content = ?", (_x,)
+                conn,
+                """
+SELECT rowid FROM main.words WHERE content = ?""",
+                (_x,),
             )
 
     @dataclass(frozen=True, kw_only=True, slots=True)
@@ -143,7 +150,10 @@ ON CONFLICT(content) DO NOTHING""",
         async with a_begin(self._conn, child) as conn:
             url_id = await self.url_id(_x.url, child=True)
             mod_time: int | None = await a_fetch_value(
-                conn, "SELECT mod_time FROM main.pages WHERE rowid = ?", (url_id,)
+                conn,
+                """
+SELECT mod_time FROM main.pages WHERE rowid = ?""",
+                (url_id,),
             )
             if (
                 _x.mod_time is not None
@@ -160,8 +170,7 @@ ON CONFLICT(rowid) DO UPDATE SET
     text = excluded.text,
     plaintext = excluded.plaintext,
     title = excluded.title,
-    links = excluded.links
-""",
+    links = excluded.links""",
                 (
                     url_id,
                     mod_time,
@@ -174,7 +183,9 @@ ON CONFLICT(rowid) DO UPDATE SET
 
             # clear index
             await conn.execute(
-                "DELETE FROM main.word_occurrences WHERE page_id = ?", (url_id,)
+                """
+DELETE FROM main.word_occurrences WHERE page_id = ?""",
+                (url_id,),
             )
 
             # index words
@@ -211,7 +222,9 @@ ON CONFLICT(page_id, word_id) DO UPDATE SET positions = json_insert(positions, '
         separator = ""
         async with a_begin(self._conn, child) as conn:
             total: int | None = await a_fetch_value(
-                conn, "SELECT count(*) FROM main.pages"
+                conn,
+                """
+SELECT count(*) FROM main.pages""",
             )
             total = (
                 count
@@ -244,8 +257,14 @@ LIMIT ?""",
                         separator = f"{'-' * 100}\n"
                         fp.write(f"{page[pages_keys.index('title')] or '(no title)'}\n")
                         fp.write(
-                            f"{await a_fetch_value(conn, 'SELECT content FROM main.urls WHERE rowid = ?', (page[pages_keys.index('rowid')],))}\n"
+                            await a_fetch_value(
+                                conn,
+                                """
+SELECT content FROM main.urls WHERE rowid = ?""",
+                                (page[pages_keys.index("rowid")],),
+                            )
                         )
+                        fp.write("\n")
                         mod_time = page[pages_keys.index("mod_time")]
                         fp.write(
                             "(no last modification time)"
@@ -273,8 +292,14 @@ LIMIT ?""",
                                 fp.write(word_separator)
                                 word_separator = "; "
                                 fp.write(
-                                    f'{await a_fetch_value(conn, "SELECT content FROM main.words WHERE rowid = ?", (word[words_keys.index("word_id")],))} {word[words_keys.index("frequency")]}'
+                                    await a_fetch_value(
+                                        conn,
+                                        """
+SELECT content FROM main.words WHERE rowid = ?""",
+                                        (word[words_keys.index("word_id")],),
+                                    )
                                 )
+                                fp.write(f" {word[words_keys.index('frequency')]}")
                         fp.write("\n")
                         for link in islice(
                             sorted(loads(page[pages_keys.index("links")])), link_count
