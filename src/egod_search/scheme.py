@@ -81,10 +81,10 @@ class Scheme:
         Get IDs for URLs. Assigns new IDs if not already assigned.
         """
         vals = tuple(map(str, contents))
-        await self._conn.execute(
-            f"""
-INSERT OR IGNORE INTO main.urls(content) VALUES {', '.join(('(?)',) * len(vals))}""",
-            vals,
+        await self._conn.executemany(
+            """
+INSERT OR IGNORE INTO main.urls(content) VALUES (?)""",
+            ((val,) for val in vals),
         )
         return tuple(
             row[0]
@@ -107,10 +107,10 @@ ORDER BY CASE content {' '.join(('WHEN ? THEN ?',) * len(vals))} END""",
         Get IDs for words. Assigns new IDs if not already assigned.
         """
         vals = contents
-        await self._conn.execute(
-            f"""
-INSERT OR IGNORE INTO main.words(content) VALUES {', '.join(('(?)',) * len(vals))}""",
-            vals,
+        await self._conn.executemany(
+            """
+INSERT OR IGNORE INTO main.words(content) VALUES (?)""",
+            ((val,) for val in vals),
         )
         return tuple(
             row[0]
@@ -203,15 +203,13 @@ DELETE FROM main.word_occurrences WHERE page_id = ?""",
         for word_match in _WORD_REGEX.finditer(page.plaintext):
             word_matches[word_match[0]].append(word_match.start())
         word_ids = await self.word_ids(tuple(word_matches))
-        await self._conn.execute(
-            f"""
-INSERT INTO main.word_occurrences(page_id, word_id, positions) VALUES {', '.join(('(?, ?, ?)',) * len(word_ids))}""",
-            tuple(
-                chain.from_iterable(
-                    (url_id, word_id, dumps(positions))
-                    for positions, word_id in zip(
-                        word_matches.values(), word_ids, strict=True
-                    )
+        await self._conn.executemany(
+            """
+INSERT INTO main.word_occurrences(page_id, word_id, positions) VALUES (?, ?, ?)""",
+            (
+                (url_id, word_id, dumps(positions))
+                for positions, word_id in zip(
+                    word_matches.values(), word_ids, strict=True
                 )
             ),
         )
