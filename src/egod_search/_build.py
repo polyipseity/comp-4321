@@ -2,17 +2,20 @@
 from pathlib import Path
 from PyInstaller.__main__ import run
 
-from . import NAME
+from . import DIRECTORY, NAME
 
 
 def main():
+    cwd = Path(__file__).parent
     run(
         (
+            "--add-data",
+            f"{cwd / 'database' / 'create_database.sql'}:{DIRECTORY}/database/create_database.sql",
             "--name",
             NAME,
             "--nowindowed",
             "--onefile",
-            str(Path(__file__).parent / "_main.py"),
+            str(cwd / "_main.py"),
         )
     )
 
