@@ -149,7 +149,7 @@ SELECT rowid FROM main.words WHERE content = ?""",
         """
         async with a_begin(self._conn, child) as conn:
             url_id = await self.url_id(_x.url, child=True)
-            mod_time: int | None = await a_fetch_value(
+            old_mod_time: int | None = await a_fetch_value(
                 conn,
                 """
 SELECT mod_time FROM main.pages WHERE rowid = ?""",
@@ -157,8 +157,8 @@ SELECT mod_time FROM main.pages WHERE rowid = ?""",
             )
             if (
                 _x.mod_time is not None
-                and mod_time is not None
-                and _x.mod_time <= mod_time
+                and old_mod_time is not None
+                and _x.mod_time <= old_mod_time
             ):
                 return False
 
@@ -173,7 +173,7 @@ ON CONFLICT(rowid) DO UPDATE SET
     links = excluded.links""",
                 (
                     url_id,
-                    mod_time,
+                    _x.mod_time,
                     _x.text,
                     _x.plaintext,
                     _x.title,
@@ -269,10 +269,11 @@ SELECT content FROM main.urls WHERE rowid = ?""",
                         fp.write(
                             "(no last modification time)"
                             if mod_time is None
-                            else f"{datetime.fromtimestamp(mod_time, timezone.utc).isoformat()}, {len(page['plaintext'])}"
+                            else datetime.fromtimestamp(
+                                mod_time, timezone.utc
+                            ).isoformat()
                         )
-                        fp.write(", ")
-                        fp.write(str(len(page[pages_keys.index("text")])))
+                        fp.write(f", {len(page[pages_keys.index('text')])}")
                         fp.write("\n")
                         words_keys = ("frequency", "word_id")
                         async with conn.execute(
