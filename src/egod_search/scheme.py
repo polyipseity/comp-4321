@@ -91,8 +91,8 @@ INSERT OR IGNORE INTO main.urls(content) VALUES {', '.join(('(?)',) * len(vals))
             for row in await self._conn.execute_fetchall(
                 f"""
 SELECT rowid FROM main.urls WHERE content IN ({', '.join('?' * len(vals))})
-""",
-                vals,
+ORDER BY CASE content {' '.join(('WHEN ? THEN ?',) * len(vals))} END""",
+                (*vals, *chain.from_iterable(map(reversed, enumerate(vals)))),
             )
         )
 
@@ -117,8 +117,8 @@ INSERT OR IGNORE INTO main.words(content) VALUES {', '.join(('(?)',) * len(vals)
             for row in await self._conn.execute_fetchall(
                 f"""
 SELECT rowid FROM main.words WHERE content IN ({', '.join('?' * len(vals))})
-""",
-                vals,
+ORDER BY CASE content {' '.join(('WHEN ? THEN ?',) * len(vals))} END""",
+                (*vals, *chain.from_iterable(map(reversed, enumerate(vals)))),
             )
         )
 
