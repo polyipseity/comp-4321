@@ -153,8 +153,17 @@ ON CONFLICT(content) DO NOTHING""",
                 return False
 
             await conn.execute(
-                "INSERT INTO main.pages(mod_time, text, plaintext, title, links) VALUES(?, ?, ?, ?, ?)",
+                """
+INSERT INTO main.pages(rowid, mod_time, text, plaintext, title, links) VALUES(?, ?, ?, ?, ?, ?)
+ON CONFLICT(rowid) DO UPDATE SET
+    mod_time = excluded.mod_time,
+    text = excluded.text,
+    plaintext = excluded.plaintext,
+    title = excluded.title,
+    links = excluded.links
+""",
                 (
+                    url_id,
                     mod_time,
                     _x.text,
                     _x.plaintext,
@@ -172,22 +181,11 @@ ON CONFLICT(content) DO NOTHING""",
             for word_match in _WORD_REGEX.finditer(_x.plaintext):
                 word, position = word_match[0], word_match.start()
                 word_id = await self.word_id(word, child=True)
-                positions = loads(
-                    await a_fetch_value(
-                        conn,
-                        "SELECT positions FROM main.word_occurrences WHERE page = ? AND word = ?",
-                        (url_id, word_id),
-                        default="[]",
-                    )
-                )
-                assert isinstance(positions, MutableSequence)
-                positions: MutableSequence[int]
-                positions.append(position)
                 await conn.execute(
                     """
 INSERT INTO main.word_occurrences(page, word, positions) VALUES(?, ?, ?)
-ON CONFLICT(page, word) DO UPDATE SET positions = excluded.positions""",
-                    (url_id, word_id, dumps(positions)),
+ON CONFLICT(page, word) DO UPDATE SET positions = json_insert(positions, '$[#]', json_extract(excluded.positions, '$[0]'))""",
+                    (url_id, word_id, dumps([position])),
                 )
         return True
 
@@ -263,7 +261,7 @@ LIMIT ?""",
 SELECT {', '.join(words_keys)}
 FROM main.word_occurrences
 WHERE page = ?
-ORDER BY frequency DESC
+ORDER BY frequency DESC, word ASC
 LIMIT ?""",
                             (
                                 page[pages_keys.index("rowid")],
