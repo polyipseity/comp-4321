@@ -1,7 +1,5 @@
-from contextlib import asynccontextmanager
 from aiosqlite import Connection
-from types import TracebackType
-from typing import Any, Callable, Iterable, Iterator, Protocol, Self, Type, TypeVar
+from typing import Any, Iterator, Protocol, TypeVar
 
 _AnyStr_co = TypeVar("_AnyStr_co", str, bytes, covariant=True)
 _AnyStr_contra = TypeVar("_AnyStr_contra", str, bytes, contravariant=True)
@@ -36,16 +34,7 @@ class SupportsWrite(Protocol[_AnyStr_contra]):
         ...
 
 
-@asynccontextmanager
-async def a_begin(conn: Connection, child: bool):
-    if child:
-        yield conn
-        return
-    async with conn:
-        yield conn
-
-
-async def a_fetch_one(conn: Connection, *args: Any):
+async def a_fetch_one(conn: Connection, *args: Any) -> Any:
     return await (await conn.execute(*args)).fetchone()
 
 

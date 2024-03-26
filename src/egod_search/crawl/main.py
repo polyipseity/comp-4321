@@ -97,7 +97,6 @@ async def main(
                         links=frozenset(outbound_urls),
                         mod_time=mod_time,
                     ),
-                    child=True,
                 )
                 await database.conn.commit()
                 progress.update()
@@ -105,9 +104,7 @@ async def main(
         if summary_path is not None:
             await summary_path.write_text(
                 await database.summary_s(
-                    count=summary_count,
-                    show_progress=show_progress,
-                    child=True,
+                    count=summary_count, show_progress=show_progress
                 )
             )
 
