@@ -6,7 +6,8 @@ CREATE TABLE IF NOT EXISTS main.urls (
 ) STRICT;
 CREATE INDEX IF NOT EXISTS main.urls_content_index ON urls (content ASC);
 DROP TRIGGER IF EXISTS main.update_urls;
-CREATE TRIGGER main.update_urls BEFORE
+CREATE TRIGGER main.update_urls
+AFTER
 UPDATE OF rowid ON main.urls FOR EACH ROW BEGIN
 UPDATE pages
 SET links = (
@@ -24,8 +25,8 @@ WHERE EXISTS (
 END;
 DROP TRIGGER IF EXISTS main.delete_urls;
 CREATE TRIGGER main.delete_urls BEFORE DELETE ON main.urls FOR EACH ROW BEGIN
-SELECT RAISE(ABORT, 'cannot delete referenced URLs')
-FROM pages
+SELECT raise(ABORT, 'cannot delete referenced URLs')
+FROM main.pages
 WHERE EXISTS (
     SELECT NULL
     FROM json_each(links)
@@ -45,15 +46,63 @@ CREATE TABLE IF NOT EXISTS main.pages (
   text TEXT NOT NULL,
   plaintext TEXT NOT NULL,
   title TEXT NOT NULL,
-  links TEXT NOT NULL CHECK(json_valid(links) & 3) -- type: JSON, list of urls(rowid)
+  links TEXT NOT NULL -- type: JSON, sorted list of unique urls(rowid)
 ) STRICT;
+DROP TRIGGER IF EXISTS main.word_occurrences_check_links;
+CREATE TRIGGER main.word_occurrences_check_links BEFORE
+INSERT ON main.pages FOR EACH ROW BEGIN
+SELECT raise(ABORT, 'invalid JSON')
+WHERE json_valid(NEW.links) & 3 = 0;
+SELECT raise(ABORT, 'not list of integers')
+FROM json_each(NEW.links)
+WHERE type != 'integer';
+SELECT raise(ABORT, 'duplicated values')
+FROM json_each(NEW.links)
+GROUP BY value
+HAVING count(*) > 1;
+SELECT raise(ABORT, 'unsorted list')
+WHERE json(NEW.links) != (
+    SELECT json_group_array(value)
+    FROM (
+        SELECT value
+        FROM json_each(NEW.links)
+        ORDER BY value
+      )
+  );
+SELECT raise(ABORT, 'not urls(rowid)')
+FROM json_each(NEW.links) AS links
+  LEFT OUTER JOIN main.urls ON main.urls.rowid = links.value
+WHERE main.urls.rowid IS NULL;
+END;
 -- main.word_occurrences
 CREATE TABLE IF NOT EXISTS main.word_occurrences (
   page_id INTEGER NOT NULL REFERENCES pages(rowid) ON UPDATE CASCADE ON DELETE RESTRICT,
   word_id INTEGER NOT NULL REFERENCES words(rowid) ON UPDATE CASCADE ON DELETE RESTRICT,
-  positions TEXT NOT NULL CHECK(json_valid(positions) & 3),
-  -- type: JSON, list of integers
+  positions TEXT NOT NULL,
+  -- type: JSON, sorted list of unique integers
   frequency INTEGER NOT NULL GENERATED ALWAYS AS (json_array_length(positions)) STORED,
   PRIMARY KEY (page_id, word_id)
 ) STRICT,
 WITHOUT ROWID;
+DROP TRIGGER IF EXISTS main.word_occurrences_check_positions;
+CREATE TRIGGER main.word_occurrences_check_positions BEFORE
+INSERT ON main.word_occurrences FOR EACH ROW BEGIN
+SELECT raise(ABORT, 'invalid JSON')
+WHERE json_valid(NEW.positions) & 3 = 0;
+SELECT raise(ABORT, 'not list of integers')
+FROM json_each(NEW.positions)
+WHERE type != 'integer';
+SELECT raise(ABORT, 'duplicated values')
+FROM json_each(NEW.positions)
+GROUP BY value
+HAVING count(*) > 1;
+SELECT raise(ABORT, 'unsorted list')
+WHERE json(NEW.positions) != (
+    SELECT json_group_array(value)
+    FROM (
+        SELECT value
+        FROM json_each(NEW.positions)
+        ORDER BY value
+      )
+  );
+END;
