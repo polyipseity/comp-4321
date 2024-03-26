@@ -238,34 +238,32 @@ SELECT count(*) FROM main.pages""",
                 unit="pages",
             ) as progress:
                 pages_keys = (
-                    "links",
-                    "mod_time",
-                    "plaintext",
-                    "rowid",
-                    "text",
-                    "title",
+                    "main.pages.links",
+                    "main.pages.mod_time",
+                    "main.pages.plaintext",
+                    "main.pages.rowid",
+                    "main.pages.text",
+                    "main.pages.title",
+                    "main.urls.content",
                 )
                 async with conn.execute(
                     f"""
 SELECT {', '.join(pages_keys)}
-FROM main.pages
+FROM main.pages INNER JOIN main.urls ON main.urls.rowid = main.pages.rowid
+ORDER BY main.pages.rowid
 LIMIT ?""",
                     (-1 if count is None else count,),
                 ) as pages:
                     async for page in pages:
                         fp.write(separator)
                         separator = f"{'-' * 100}\n"
-                        fp.write(f"{page[pages_keys.index('title')] or '(no title)'}\n")
                         fp.write(
-                            await a_fetch_value(
-                                conn,
-                                """
-SELECT content FROM main.urls WHERE rowid = ?""",
-                                (page[pages_keys.index("rowid")],),
-                            )
+                            page[pages_keys.index("main.pages.title")] or "(no title)"
                         )
                         fp.write("\n")
-                        mod_time = page[pages_keys.index("mod_time")]
+                        fp.write(page[pages_keys.index("main.urls.content")])
+                        fp.write("\n")
+                        mod_time = page[pages_keys.index("main.pages.mod_time")]
                         fp.write(
                             "(no last modification time)"
                             if mod_time is None
@@ -273,18 +271,23 @@ SELECT content FROM main.urls WHERE rowid = ?""",
                                 mod_time, timezone.utc
                             ).isoformat()
                         )
-                        fp.write(f", {len(page[pages_keys.index('text')])}")
-                        fp.write("\n")
-                        words_keys = ("frequency", "word_id")
+                        fp.write(
+                            f", {len(page[pages_keys.index('main.pages.text')])}\n"
+                        )
+                        words_keys = (
+                            "main.word_occurrences.frequency",
+                            "main.word_occurrences.word_id",
+                            "main.words.content",
+                        )
                         async with conn.execute(
                             f"""
 SELECT {', '.join(words_keys)}
-FROM main.word_occurrences
+FROM main.word_occurrences INNER JOIN main.words ON main.words.rowid = main.word_occurrences.word_id
 WHERE page_id = ?
-ORDER BY frequency DESC, word_id ASC
+ORDER BY main.word_occurrences.frequency DESC, main.words.content ASC
 LIMIT ?""",
                             (
-                                page[pages_keys.index("rowid")],
+                                page[pages_keys.index("main.pages.rowid")],
                                 -1 if keyword_count is None else keyword_count,
                             ),
                         ) as words:
@@ -293,17 +296,12 @@ LIMIT ?""",
                                 fp.write(word_separator)
                                 word_separator = "; "
                                 fp.write(
-                                    await a_fetch_value(
-                                        conn,
-                                        """
-SELECT content FROM main.words WHERE rowid = ?""",
-                                        (word[words_keys.index("word_id")],),
-                                    )
+                                    f"{word[words_keys.index('main.words.content')]} {word[words_keys.index('main.word_occurrences.frequency')]}"
                                 )
-                                fp.write(f" {word[words_keys.index('frequency')]}")
                         fp.write("\n")
                         for link in islice(
-                            sorted(loads(page[pages_keys.index("links")])), link_count
+                            sorted(loads(page[pages_keys.index("main.pages.links")])),
+                            link_count,
                         ):
                             fp.write(f"{link}\n")
                         progress.update()
