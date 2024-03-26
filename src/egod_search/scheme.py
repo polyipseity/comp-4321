@@ -163,7 +163,8 @@ SELECT rowid FROM main.words WHERE content IN ({', '.join('?' * len(vals))})
         """
         Index an page and return whether the page is actually indexed. Raises `ValueError` if `url_id` is invalid.
         """
-        url_id = await self.url_id(page.url)
+        url_and_links_id = await self.url_ids((page.url, *page.links))
+        url_id = url_and_links_id[0]
         old_mod_time: int | None = await a_fetch_value(
             self._conn,
             """
@@ -186,7 +187,7 @@ INSERT OR REPLACE INTO main.pages(rowid, mod_time, text, plaintext, title, links
                 page.text,
                 page.plaintext,
                 page.title,
-                dumps(list(map(str, page.links))),
+                dumps(sorted(url_and_links_id[1:])),
             ),
         )
 
