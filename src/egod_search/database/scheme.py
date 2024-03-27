@@ -61,7 +61,7 @@ class Scheme:
         """
 
     _CREATE_DATABASE_SCRIPT = (
-        files(__package__ or "") / ".." / "res" / "create_database.sql"
+        files(__package__ or "") / "../res/create_database.sql"
     ).read_text()
     __slots__ = ("_conn", "_own_conn")
 

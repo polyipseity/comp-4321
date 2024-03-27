@@ -1,0 +1,282 @@
+# -*- coding: UTF-8 -*-
+from functools import cache
+from importlib.resources import files
+from itertools import islice, pairwise, tee
+from typing import Any, Iterable, Iterator, Sequence
+
+_STOP_WORDS = frozenset(
+    word.casefold()
+    for word in (files(__package__ or "") / "../res/stop_words.txt")
+    .read_text()
+    .splitlines()
+)
+
+
+class _Porter:
+    _LSZ = frozenset("lsz")
+    _NOT_SEMIVOWELS = frozenset({"ay", "ey", "iy", "oy", "uy"})
+    _PREFIXES = (
+        "kilo",
+        "micro",
+        "milli",
+        "intra",
+        "ultra",
+        "mega",
+        "nano",
+        "pico",
+        "pseudo",
+    )
+    _STEP2_REPLACEMENTS = {
+        "ational": "ate",
+        "tional": "tion",
+        "enci": "ence",
+        "anci": "ance",
+        "izer": "ize",
+        "iser": "ize",
+        "abli": "able",
+        "alli": "al",
+        "entli": "ent",
+        "eli": "e",
+        "ousli": "ous",
+        "ization": "ize",
+        "isation": "ize",
+        "ation": "ate",
+        "ator": "ate",
+        "alism": "al",
+        "iveness": "ive",
+        "fulness": "ful",
+        "ousness": "ous",
+        "aliti": "al",
+        "iviti": "ive",
+        "biliti": "ble",
+    }
+    _STEP3_REPLACEMENTS = {
+        "icate": "ic",
+        "active": "",
+        "alize": "al",
+        "alise": "al",
+        "iciti": "ic",
+        "ical": "ic",
+        "ful": "",
+        "ness": "",
+    }
+    _STEP4_REPLACEMENTS = (
+        "al",
+        "ance",
+        "ence",
+        "er",
+        "ic",
+        "able",
+        "ible",
+        "ant",
+        "ement",
+        "ment",
+        "ent",
+        "sion",
+        "tion",
+        "ou",
+        "ism",
+        "ate",
+        "iti",
+        "ous",
+        "ive",
+        "ize",
+        "ise",
+    )
+    _VOWELS = frozenset({"a", "e", "i", "o", "u", "y"})
+    _WXY = frozenset("wxy")
+    __slots__ = ()
+
+    def __call__(self, word: str) -> str:
+        """
+        The Porter stemming algorithm.
+        """
+        word = self.clean(word)
+        if len(word) <= 2:
+            return word
+        return self.strip_suffix(self.strip_prefix(word))
+
+    def clean(self, word: str) -> str:
+        """
+        Clean word to convert to lowercase and keep alphanumeric characters.
+        """
+        return "".join(filter(str.isalnum, word.lower()))
+
+    def cvc(self, word: str) -> bool:
+        """
+        Return whether the word is in CVC format.
+        """
+        return (
+            len(word) >= 3
+            and word[-1] not in self._WXY
+            and not self.is_vowel_segment(word[-2:])
+            and self.is_vowel_segment(word[-3:-1])
+            and not self.is_vowel_segment(
+                f"?{word[-3]}" if len(word) == 3 else word[-4:-2]
+            )
+        )
+
+    def contain_vowels(self, word: str) -> bool:
+        """
+        Return whether the word contains any vowels.
+        """
+        return any(map(self.is_vowel_segment, map("".join, pairwise(f"a{word}"))))
+
+    def is_vowel_segment(self, segment: str) -> bool:
+        """
+        Return if two-character `chars` is a vowel.
+        """
+        assert len(segment) == 2
+        return segment[-1] in self._VOWELS and segment not in self._NOT_SEMIVOWELS
+
+    def measure_vowel_segments(self, word: str) -> int:
+        """
+        Measure the number of vowel segments.
+        """
+        vowels = map(self.is_vowel_segment, map("".join, pairwise(f"a{word}")))
+        vowels, next_vowels = tee(vowels, 2)
+        return sum(
+            1
+            for state in zip(vowels, islice(next_vowels, 1, None))
+            if state == (True, False)
+        )
+
+    def strip_prefix(self, word: str) -> str:
+        """
+        Strip prefix from word if any.
+        """
+        if not (ret := word):
+            return ""
+        for prefix in self._PREFIXES:
+            if (ret := word.removeprefix(prefix)) != word:
+                break
+        return ret
+
+    def strip_suffix(self, word: str) -> str:
+        """
+        Strip suffix from word if any.
+        """
+        for step in (self.step1, self.step2, self.step3, self.step4, self.step5):
+            if not word:
+                return ""
+            word = step(word)
+        return word
+
+    def step1(self, word: str) -> str:
+        """
+        Step 1 of the Porter stemming algorithm.
+        """
+        if word.endswith("s"):
+            if word.endswith(("sses", "ies")):
+                word = word[:-2]
+            else:
+                if len(word) == 1:
+                    return ""
+                if word[-2] != "s":
+                    word = word[:-1]
+        if word.endswith("eed"):
+            if self.measure_vowel_segments(word[:-3]) > 0:
+                word = word[:-1]
+        else:
+            if (word2 := word.removesuffix("ed")) != word or (
+                word2 := word.removesuffix("ing")
+            ) != word:
+                word = word2
+                if self.contain_vowels(word):
+                    if len(word) <= 1:
+                        return word
+                    if word.endswith(("at", "bl", "iz")):
+                        word += "e"
+                    else:
+                        if word[-1] not in self._LSZ and word[-1] == word[-2]:
+                            word = word[:-1]
+                        elif self.measure_vowel_segments(word) == 1 and self.cvc(word):
+                            word += "e"
+        if word.endswith("y") and self.contain_vowels(word[:-1]):
+            word = f"{word[:-1]}i"
+        return word
+
+    def step2(self, word: str) -> str:
+        """
+        Step 2 of the Porter stemming algorithm.
+        """
+        for find, replace in self._STEP2_REPLACEMENTS.items():
+            if (
+                word2 := word.removesuffix(find)
+            ) != word and self.measure_vowel_segments(word2) > 0:
+                return f"{word2}{replace}"
+        return word
+
+    def step3(self, word: str) -> str:
+        """
+        Step 3 of the Porter stemming algorithm.
+        """
+        for find, replace in self._STEP3_REPLACEMENTS.items():
+            if (
+                word2 := word.removesuffix(find)
+            ) != word and self.measure_vowel_segments(word2) > 0:
+                return f"{word2}{replace}"
+        return word
+
+    def step4(self, word: str) -> str:
+        """
+        Step 4 of the Porter stemming algorithm.
+        """
+        for find in self._STEP4_REPLACEMENTS:
+            if (
+                word2 := word.removesuffix(find)
+            ) != word and self.measure_vowel_segments(word2) > 1:
+                return word2
+        return word
+
+    def step5(self, word: str) -> str:
+        """
+        Step 5 of the Porter stemming algorithm.
+        """
+        if word[-1] == "e":
+            if (measure := self.measure_vowel_segments(word)) > 1:
+                word = word[:-1]
+            elif measure == 1 and not self.cvc(word2 := word[:-1]):
+                word = word2
+        if len(word) == 1:
+            return word
+        if "l" in word[-2:] and self.measure_vowel_segments(word) > 1:
+            word = word[:-1]
+        return word
+
+
+@cache
+porter = _Porter()  # type: ignore
+
+
+def remove_stop_words_iter(words: Iterable[str]) -> Iterator[str]:
+    """
+    Remove stop words.
+    """
+    for word in words:
+        if word.casefold() in _STOP_WORDS:
+            continue
+        yield word
+
+
+def remove_stop_words(words: Iterable[str]) -> Sequence[str]:
+    """
+    Remove stop words into a sequence of words.
+    """
+    return tuple(remove_stop_words_iter(words))
+
+
+def split_words(*args: Any, **kwargs: Any) -> Sequence[str]:
+    """
+    Split text into a sequence of words. See `split_words_iter`.
+    """
+    return tuple(split_words_iter(*args, **kwargs))
+
+
+def split_words_iter(text: str) -> Iterator[str]:
+    """
+    Split text into a sequence of words.
+
+    Splits on consecutive whitespaces and does not return empty strings.
+    """
+    return iter(text.split())
