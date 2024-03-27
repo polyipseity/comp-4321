@@ -9,22 +9,55 @@ from yarl import URL
 
 from .._util import a_fetch_value
 
-URLID = NewType("URLID", int)
-"""
-ID for URLs.
-"""
-WordID = NewType("WordID", int)
-"""
-ID for words.
-"""
-
 
 class Scheme:
     """
     Database scheme.
     """
 
-    __slots__ = ("_conn", "_own_conn")
+    URLID = NewType("URLID", int)
+    """
+    ID for URLs.
+    """
+    WordID = NewType("WordID", int)
+    """
+    ID for words.
+    """
+
+    @dataclass(frozen=True, kw_only=True, slots=True)
+    class Page:
+        """
+        Database page scheme.
+        """
+
+        url: URL
+        """
+        Page URL.
+        """
+        title: str
+        """
+        Page title.
+        """
+        text: str
+        """
+        Page content with markups.
+        """
+        plaintext: str
+        """
+        Page content in plaintext. That is, without any markups.
+        """
+        links: Collection[URL]
+        """
+        Links in the page.
+        """
+        mod_time: int | None
+        """
+        Last modification time.
+        """
+        word_occurrences: Mapping[str, Collection[int]]
+        """
+        Mapping from words to their positions. Positions are unique and sorted.
+        """
 
     CREATE_DATABASE_SCRIPT = (
         files(__package__ or "") / "database" / "create_database.sql"
@@ -32,6 +65,8 @@ class Scheme:
     """
     Script to create database.
     """
+
+    __slots__ = ("_conn", "_own_conn")
 
     def __init__(self, conn: Connection, *, own_conn: bool = True) -> None:
         """
@@ -120,41 +155,6 @@ ORDER BY CASE content {' '.join(('WHEN ? THEN ?',) * len(vals))} END""",
         Same as `word_ids` but for one item. Same options are supported.
         """
         return (await self.word_ids((content,), *args, **kwargs))[0]
-
-    @dataclass(frozen=True, kw_only=True, slots=True)
-    class Page:
-        """
-        Database page scheme.
-        """
-
-        url: URL
-        """
-        Page URL.
-        """
-        title: str
-        """
-        Page title.
-        """
-        text: str
-        """
-        Page content with markups.
-        """
-        plaintext: str
-        """
-        Page content in plaintext. That is, without any markups.
-        """
-        links: Collection[URL]
-        """
-        Links in the page.
-        """
-        mod_time: int | None
-        """
-        Last modification time.
-        """
-        word_occurrences: Mapping[str, Collection[int]]
-        """
-        Mapping from words to their positions. Positions are unique and sorted.
-        """
 
     async def index_page(self, page: Page, /) -> bool:
         """
