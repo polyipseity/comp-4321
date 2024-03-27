@@ -14,6 +14,14 @@ _STOP_WORDS = frozenset(
 _WORD_REGEX = compile(r"\S+", flags=DOTALL)
 
 
+def default_transform(text: str) -> Iterator[tuple[int, str]]:
+    words = split_words_iter(text)
+    words = ((pos, word.lower()) for pos, word in words)
+    words = remove_stop_words_iter(words)
+    words = ((pos, porter(word)) for pos, word in words)
+    return ((pos, word) for pos, word in words if word is not None)
+
+
 class _Porter:
     _LSZ = frozenset("lsz")
     _NOT_SEMIVOWELS = frozenset({"ay", "ey", "iy", "oy", "uy"})

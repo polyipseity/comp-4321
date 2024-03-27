@@ -90,7 +90,7 @@ def iter_or_def(obj: object, default: Iterator[object] = iter(())) -> Iterator[o
         return default
 
 
-def parse_http_last_modified(val: str):
+def parse_http_last_modified(val: str) -> datetime:
     val = val[5:]
     for m_key, m_val in _HTTP_LAST_MODIFIED.items():
         if m_key in val:
