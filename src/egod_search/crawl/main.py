@@ -1,7 +1,6 @@
 # -*- coding: UTF-8 -*-
 from asyncio import TaskGroup, gather
 from collections import defaultdict
-from datetime import datetime
 from aiosqlite import connect
 from anyio import Path
 from argparse import ZERO_OR_MORE, ArgumentParser, Namespace
@@ -14,6 +13,7 @@ from typing import Callable, Collection, MutableSequence
 from yarl import URL
 
 from .. import VERSION
+from .._util import parse_http_last_modified
 from ..crawl import Crawler
 from ..database.scheme import Scheme
 from ..index.transform import porter, remove_stop_words_iter, split_words_iter
@@ -78,9 +78,8 @@ async def main(
                     url = response.url
                     try:
                         mod_time = int(
-                            datetime.strptime(
-                                response.headers.get("Last-Modified", "")[5:],
-                                "%d %m %Y %H:%M:%S %Z",
+                            parse_http_last_modified(
+                                response.headers.get("Last-Modified", "")
                             ).timestamp()
                         )
                     except ValueError:
