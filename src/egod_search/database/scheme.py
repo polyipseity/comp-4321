@@ -61,7 +61,7 @@ class Scheme:
         """
 
     CREATE_DATABASE_SCRIPT = (
-        files(__package__ or "") / "database" / "create_database.sql"
+        files(__package__ or "") / ".." / "res" / "create_database.sql"
     ).read_text()
     """
     Script to create database.

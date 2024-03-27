@@ -10,7 +10,7 @@ def main():
     run(
         (
             "--add-data",
-            f"{cwd / 'database'}:{DIRECTORY}/database",
+            f"{cwd / 'res'}:{DIRECTORY}/res",
             "--name",
             NAME,
             "--nowindowed",
