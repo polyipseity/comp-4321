@@ -54,10 +54,10 @@ pip install -r requirements.txt
 This command will install all the necessary packages specified in the "requirements.txt" file.
 
 **Step 7:**
-Run the crawler. 
+Run the crawler using the command for Phase 1. 
 
 _Note: Check again to see if `(venv)` appears in the command prompt for using the virtual environment._
 
 ```
-python -m egod_search.crawl
+python -m egod_search.crawl -n 30 -d database.json -s spider_result.txt https://www.cse.ust.hk/~kwtleung/COMP4321/testpage.htm
 ```
