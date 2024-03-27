@@ -9,6 +9,7 @@ from types import TracebackType
 from typing import Any, Collection, Mapping, NewType, Self, Sequence, Type
 from yarl import URL
 
+from .. import PACKAGE_NAME
 from .._util import a_fetch_value
 
 
@@ -70,7 +71,7 @@ class Scheme:
         """
 
     _CREATE_DATABASE_SCRIPT = (
-        files(__package__ or "") / "../res/create_database.sql"
+        files(PACKAGE_NAME) / "res/create_database.sql"
     ).read_text()
     __slots__ = ("_conn", "_own_conn")
 

@@ -2,7 +2,7 @@
 from pathlib import Path
 from PyInstaller.__main__ import run
 
-from . import DIRECTORY, NAME
+from . import NAME, PACKAGE_NAME
 
 
 def main():
@@ -10,7 +10,7 @@ def main():
     run(
         (
             "--add-data",
-            f"{cwd / 'res'}:{DIRECTORY}/res",
+            f"{cwd / 'res'}:{PACKAGE_NAME}/res",
             "--name",
             NAME,
             "--nowindowed",

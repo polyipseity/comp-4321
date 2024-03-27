@@ -5,11 +5,11 @@ from itertools import islice, pairwise, tee
 from re import DOTALL, compile
 from typing import Any, Iterable, Iterator, Sequence
 
+from .. import PACKAGE_NAME
+
 _STOP_WORDS = frozenset(
     word.casefold()
-    for word in (files(__package__ or "") / "../res/stop_words.txt")
-    .read_text()
-    .splitlines()
+    for word in (files(PACKAGE_NAME) / "res/stop_words.txt").read_text().splitlines()
 )
 _WORD_REGEX = compile(r"\S+", flags=DOTALL)
 

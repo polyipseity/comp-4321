@@ -4,7 +4,7 @@ NAME = "egod-search"  # synchronize with `pyproject.toml`
 """
 Package name.
 """
-DIRECTORY = NAME.replace("-", "_")
+PACKAGE_NAME = NAME.replace("-", "_")
 """
 Package directory name.
 """
