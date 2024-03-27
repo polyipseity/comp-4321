@@ -1,3 +1,4 @@
+# -*- coding: UTF-8 -*-
 from datetime import datetime, timezone
 from io import StringIO
 from json import loads

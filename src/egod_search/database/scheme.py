@@ -1,3 +1,4 @@
+# -*- coding: UTF-8 -*-
 from aiosqlite import Connection
 from dataclasses import dataclass
 from importlib.resources import files

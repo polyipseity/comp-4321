@@ -1,3 +1,4 @@
+# -*- coding: UTF-8 -*-
 from aiosqlite import Connection
 from typing import Any, Iterator, Protocol, TypeVar
 
