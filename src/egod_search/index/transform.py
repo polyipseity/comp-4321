@@ -1,7 +1,8 @@
 # -*- coding: UTF-8 -*-
-from functools import cache
+from functools import cache, wraps
 from importlib.resources import files
 from itertools import islice, pairwise, tee
+from re import DOTALL, compile
 from typing import Any, Iterable, Iterator, Sequence
 
 _STOP_WORDS = frozenset(
@@ -10,6 +11,7 @@ _STOP_WORDS = frozenset(
     .read_text()
     .splitlines()
 )
+_WORD_REGEX = compile(r"\S+", flags=DOTALL)
 
 
 class _Porter:
@@ -87,14 +89,14 @@ class _Porter:
     _WXY = frozenset("wxy")
     __slots__ = ()
 
-    def __call__(self, word: str) -> str:
+    def __call__(self, word: str) -> str | None:
         """
         The Porter stemming algorithm.
         """
         word = self.clean(word)
         if len(word) <= 2:
-            return word
-        return self.strip_suffix(self.strip_prefix(word))
+            return word or None
+        return self.strip_suffix(self.strip_prefix(word)) or None
 
     def clean(self, word: str) -> str:
         """
@@ -245,38 +247,46 @@ class _Porter:
         return word
 
 
+_porter = _Porter()
+
+
+@wraps(_porter)
 @cache
-porter = _Porter()  # type: ignore
+def porter(word: str) -> str | None:
+    return _porter(word)
 
 
-def remove_stop_words_iter(words: Iterable[str]) -> Iterator[str]:
+def remove_stop_words(words: Iterable[tuple[int, str]]) -> Sequence[tuple[int, str]]:
     """
-    Remove stop words.
-    """
-    for word in words:
-        if word.casefold() in _STOP_WORDS:
-            continue
-        yield word
-
-
-def remove_stop_words(words: Iterable[str]) -> Sequence[str]:
-    """
-    Remove stop words into a sequence of words.
+    Remove stop words into a sequence of positions and words. See `remove_stop_words_iter`.
     """
     return tuple(remove_stop_words_iter(words))
 
 
-def split_words(*args: Any, **kwargs: Any) -> Sequence[str]:
+def remove_stop_words_iter(
+    words: Iterable[tuple[int, str]]
+) -> Iterator[tuple[int, str]]:
     """
-    Split text into a sequence of words. See `split_words_iter`.
+    Remove stop words.
+    """
+    for position, word in words:
+        if word.casefold() in _STOP_WORDS:
+            continue
+        yield position, word
+
+
+def split_words(*args: Any, **kwargs: Any) -> Sequence[tuple[int, str]]:
+    """
+    Split text into a sequence of positions and words. See `split_words_iter`.
     """
     return tuple(split_words_iter(*args, **kwargs))
 
 
-def split_words_iter(text: str) -> Iterator[str]:
+def split_words_iter(text: str) -> Iterator[tuple[int, str]]:
     """
-    Split text into a sequence of words.
+    Split text into a sequence of positions and words.
 
     Splits on consecutive whitespaces and does not return empty strings.
     """
-    return iter(text.split())
+    for match in _WORD_REGEX.finditer(text):
+        yield match.start(), match[0]

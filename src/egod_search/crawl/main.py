@@ -8,7 +8,6 @@ from argparse import ZERO_OR_MORE, ArgumentParser, Namespace
 from asyncstdlib import islice as aislice
 from bs4 import BeautifulSoup
 from functools import wraps
-from re import compile
 from sys import modules
 from tqdm.auto import tqdm
 from typing import Callable, Collection, MutableSequence
@@ -17,9 +16,8 @@ from yarl import URL
 from .. import VERSION
 from ..crawl import Crawler
 from ..database.scheme import Scheme
+from ..index.transform import porter, remove_stop_words_iter, split_words_iter
 from .print import summary_s
-
-_WORD_REGEX = compile(r"[a-zA-Z0-9\-_]+")
 
 
 async def main(
@@ -91,9 +89,15 @@ async def main(
 
                     html = BeautifulSoup(text, "html.parser")
                     plaintext = html.text
+
+                    words = split_words_iter(plaintext)
+                    words = ((pos, word.lower()) for pos, word in words)
+                    words = remove_stop_words_iter(words)
+                    words = ((pos, porter(word)) for pos, word in words)
+                    words = ((pos, word) for pos, word in words if word is not None)
                     word_occurrences = defaultdict[str, MutableSequence[int]](list)
-                    for word_match in _WORD_REGEX.finditer(plaintext):
-                        word_occurrences[word_match[0]].append(word_match.start())
+                    for pos, word in words:
+                        word_occurrences[word].append(pos)
 
                     await database.index_page(
                         Scheme.Page(
