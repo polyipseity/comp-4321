@@ -1,5 +1,6 @@
 # -*- coding: UTF-8 -*-
 from asyncio import TaskGroup, gather
+from collections import defaultdict
 from datetime import datetime
 from aiosqlite import connect
 from anyio import Path
@@ -7,14 +8,17 @@ from argparse import ZERO_OR_MORE, ArgumentParser, Namespace
 from asyncstdlib import islice as aislice
 from bs4 import BeautifulSoup
 from functools import wraps
+from re import compile
 from sys import modules
 from tqdm.auto import tqdm
-from typing import Callable, Collection
+from typing import Callable, Collection, MutableSequence
 from yarl import URL
 
 from .. import VERSION
 from ..crawl import Crawler
 from ..scheme import Scheme
+
+_WORD_REGEX = compile(r"[a-zA-Z0-9\-_]+")
 
 
 async def main(
@@ -83,17 +87,25 @@ async def main(
                     except ValueError:
                         mod_time = None
                     text = await text
+
                     html = BeautifulSoup(text, "html.parser")
+                    plaintext = html.text
+                    word_occurrences = defaultdict[str, MutableSequence[int]](list)
+                    for word_match in _WORD_REGEX.finditer(plaintext):
+                        word_occurrences[word_match[0]].append(word_match.start())
+
                     await database.index_page(
                         Scheme.Page(
                             url=url,
                             title="" if html.title is None else html.title.string or "",
                             text=text,
-                            plaintext=html.text,
+                            plaintext=plaintext,
                             links=outbound_urls,
                             mod_time=mod_time,
+                            word_occurrences=word_occurrences,
                         ),
                     )
+
                     await database.conn.commit()
                     progress.update()
 

@@ -1,4 +1,3 @@
-from collections import defaultdict
 from dataclasses import dataclass
 from aiosqlite import Connection
 from datetime import datetime, timezone
@@ -6,9 +5,8 @@ from importlib.resources import files
 from io import StringIO
 from itertools import chain
 from json import dumps, loads
-from re import compile
 from types import TracebackType
-from typing import Any, Collection, MutableSequence, NewType, Self, Sequence, Type
+from typing import Any, Collection, Mapping, NewType, Self, Sequence, Type
 from tqdm.auto import tqdm
 from yarl import URL
 
@@ -22,8 +20,6 @@ WordID = NewType("WordID", int)
 """
 ID for words.
 """
-
-_WORD_REGEX = compile(r"[a-zA-Z0-9\-_]+")
 
 
 class Scheme:
@@ -158,6 +154,10 @@ ORDER BY CASE content {' '.join(('WHEN ? THEN ?',) * len(vals))} END""",
         """
         Last modification time.
         """
+        word_occurrences: Mapping[str, Collection[int]]
+        """
+        Mapping from words to their positions. Positions are unique and sorted.
+        """
 
     async def index_page(self, page: Page, /) -> bool:
         """
@@ -201,17 +201,14 @@ DELETE FROM main.word_occurrences WHERE page_id = ?""",
         )
 
         # index words
-        word_matches = defaultdict[str, MutableSequence[int]](list)
-        for word_match in _WORD_REGEX.finditer(page.plaintext):
-            word_matches[word_match[0]].append(word_match.start())
-        word_ids = await self.word_ids(tuple(word_matches))
+        word_ids = await self.word_ids(tuple(page.word_occurrences))
         await self._conn.executemany(
             """
 INSERT INTO main.word_occurrences(page_id, word_id, positions) VALUES (?, ?, ?)""",
             (
-                (url_id, word_id, dumps(positions))
+                (url_id, word_id, dumps(tuple(positions)))
                 for positions, word_id in zip(
-                    word_matches.values(), word_ids, strict=True
+                    page.word_occurrences.values(), word_ids, strict=True
                 )
             ),
         )
