@@ -76,7 +76,7 @@ LIMIT ?""",
                 fp.write(f", {len(text.encode())}\n")  # number of bytes
 
                 words_keys = (
-                    "main.word_occurrences.frequency",
+                    "sum(main.word_occurrences.frequency)",
                     "main.word_occurrences.word_id",
                     "main.words.content",
                 )
@@ -85,7 +85,8 @@ LIMIT ?""",
 SELECT {', '.join(words_keys)}
 FROM main.word_occurrences INNER JOIN main.words ON main.words.rowid = main.word_occurrences.word_id
 WHERE page_id = ?
-ORDER BY main.word_occurrences.frequency DESC, main.words.content ASC
+GROUP BY main.word_occurrences.page_id, main.word_occurrences.word_id
+ORDER BY sum(main.word_occurrences.frequency) DESC, main.words.content ASC
 LIMIT ?""",
                     (
                         page[pages_keys.index("main.pages.rowid")],
@@ -97,7 +98,7 @@ LIMIT ?""",
                         fp.write(word_separator)
                         word_separator = "; "
                         fp.write(
-                            f"{word[words_keys.index('main.words.content')]} {word[words_keys.index('main.word_occurrences.frequency')]}"
+                            f"{word[words_keys.index('main.words.content')]} {word[words_keys.index('sum(main.word_occurrences.frequency)')]}"
                         )
                 fp.write("\n")
 

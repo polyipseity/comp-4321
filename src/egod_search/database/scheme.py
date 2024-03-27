@@ -1,4 +1,5 @@
 # -*- coding: UTF-8 -*-
+from enum import StrEnum
 from aiosqlite import Connection
 from dataclasses import dataclass
 from importlib.resources import files
@@ -31,6 +32,14 @@ class Scheme:
         Database page scheme.
         """
 
+        class WordOccurrenceType(StrEnum):
+            """
+            Word occurrence type.
+            """
+
+            TEXT = "text"
+            TITLE = "title"
+
         url: URL
         """
         Page URL.
@@ -55,9 +64,9 @@ class Scheme:
         """
         Last modification time.
         """
-        word_occurrences: Mapping[str, Collection[int]]
+        word_occurrences: Mapping[str, Mapping[WordOccurrenceType, Collection[int]]]
         """
-        Mapping from words to their positions. Positions are unique and sorted.
+        Mapping from words to their types and positions. Positions are unique and sorted.
         """
 
     _CREATE_DATABASE_SCRIPT = (
@@ -198,9 +207,12 @@ DELETE FROM main.word_occurrences WHERE page_id = ?""",
         word_ids = await self.word_ids(tuple(page.word_occurrences))
         await self._conn.executemany(
             """
-INSERT INTO main.word_occurrences(page_id, word_id, positions) VALUES (?, ?, ?)""",
-            (
-                (url_id, word_id, dumps(tuple(positions)))
+INSERT INTO main.word_occurrences(page_id, word_id, type, positions) VALUES (?, ?, ?, ?)""",
+            chain.from_iterable(
+                (
+                    (url_id, word_id, type, dumps(tuple(typed_pos)))
+                    for type, typed_pos in positions.items()
+                )
                 for positions, word_id in zip(
                     page.word_occurrences.values(), word_ids, strict=True
                 )

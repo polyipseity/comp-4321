@@ -105,10 +105,11 @@ END;
 CREATE TABLE IF NOT EXISTS main.word_occurrences (
   page_id INTEGER NOT NULL REFERENCES pages(rowid) ON UPDATE CASCADE ON DELETE RESTRICT,
   word_id INTEGER NOT NULL REFERENCES words(rowid) ON UPDATE CASCADE ON DELETE RESTRICT,
+  type TEXT NOT NULL CHECK(type IN ('text', 'title')),
   positions TEXT NOT NULL,
   -- type: JSON, sorted list of unique nonnegative integers
   frequency INTEGER NOT NULL GENERATED ALWAYS AS (json_array_length(positions)) STORED,
-  PRIMARY KEY (page_id, word_id)
+  PRIMARY KEY (page_id, word_id, type)
 ) STRICT,
 WITHOUT ROWID;
 DROP TRIGGER IF EXISTS main.word_occurrences_check_positions_insert;

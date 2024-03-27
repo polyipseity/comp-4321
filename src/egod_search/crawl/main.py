@@ -9,14 +9,14 @@ from bs4 import BeautifulSoup
 from functools import wraps
 from sys import modules
 from tqdm.auto import tqdm
-from typing import Callable, Collection, MutableSequence
+from typing import Callable, Collection, MutableMapping, MutableSequence
 from yarl import URL
 
 from .. import VERSION
 from .._util import parse_http_last_modified
 from ..crawl import Crawler
 from ..database.scheme import Scheme
-from ..index.transform import porter, remove_stop_words_iter, split_words_iter
+from ..index.transform import default_transform
 from .print import summary_s
 
 
@@ -87,21 +87,28 @@ async def main(
                     text = await text
 
                     html = BeautifulSoup(text, "html.parser")
+                    title = "" if html.title is None else html.title.string or ""
                     plaintext = html.text
 
-                    words = split_words_iter(plaintext)
-                    words = ((pos, word.lower()) for pos, word in words)
-                    words = remove_stop_words_iter(words)
-                    words = ((pos, porter(word)) for pos, word in words)
-                    words = ((pos, word) for pos, word in words if word is not None)
-                    word_occurrences = defaultdict[str, MutableSequence[int]](list)
-                    for pos, word in words:
-                        word_occurrences[word].append(pos)
+                    word_occurrences = defaultdict[
+                        str,
+                        MutableMapping[
+                            Scheme.Page.WordOccurrenceType, MutableSequence[int]
+                        ],
+                    ](lambda: defaultdict(list))
+                    for pos, word in default_transform(title):
+                        word_occurrences[word][
+                            Scheme.Page.WordOccurrenceType.TITLE
+                        ].append(pos)
+                    for pos, word in default_transform(plaintext):
+                        word_occurrences[word][
+                            Scheme.Page.WordOccurrenceType.TEXT
+                        ].append(pos)
 
                     await database.index_page(
                         Scheme.Page(
                             url=url,
-                            title="" if html.title is None else html.title.string or "",
+                            title=title,
                             text=text,
                             plaintext=plaintext,
                             links=outbound_urls,
