@@ -16,7 +16,7 @@ from yarl import URL
 
 from .. import VERSION
 from ..crawl import Crawler
-from ..scheme import Scheme
+from ..database.scheme import Scheme
 
 _WORD_REGEX = compile(r"[a-zA-Z0-9\-_]+")
 

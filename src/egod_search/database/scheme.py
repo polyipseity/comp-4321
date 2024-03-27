@@ -10,7 +10,7 @@ from typing import Any, Collection, Mapping, NewType, Self, Sequence, Type
 from tqdm.auto import tqdm
 from yarl import URL
 
-from ._util import SupportsWrite, a_fetch_value
+from .._util import SupportsWrite, a_fetch_value
 
 URLID = NewType("URLID", int)
 """
