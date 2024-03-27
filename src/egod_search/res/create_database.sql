@@ -14,6 +14,7 @@ SET links = (
     SELECT json_group_array(value)
     FROM (
         SELECT iif(value = OLD.rowid, NEW.rowid, OLD.rowid) AS value
+        ORDER BY value
         FROM json_each(links)
       )
   )
