@@ -17,6 +17,7 @@ from yarl import URL
 from .. import VERSION
 from ..crawl import Crawler
 from ..database.scheme import Scheme
+from .print import summary_s
 
 _WORD_REGEX = compile(r"[a-zA-Z0-9\-_]+")
 
@@ -111,8 +112,8 @@ async def main(
 
         if summary_path is not None:
             await summary_path.write_text(
-                await database.summary_s(
-                    count=summary_count, show_progress=show_progress
+                await summary_s(
+                    database, count=summary_count, show_progress=show_progress
                 )
             )
 
