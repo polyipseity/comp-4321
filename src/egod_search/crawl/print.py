@@ -72,7 +72,8 @@ LIMIT ?""",
                     if mod_time is None
                     else datetime.fromtimestamp(mod_time, timezone.utc).isoformat()
                 )
-                fp.write(f", {len(page[pages_keys.index('main.pages.text')])}\n")
+                text: str = page[pages_keys.index("main.pages.text")]
+                fp.write(f", {len(text.encode())}\n")  # number of bytes
 
                 words_keys = (
                     "main.word_occurrences.frequency",
