@@ -94,9 +94,11 @@ def parse_http_last_modified(val: str):
     val = val[5:]
     for m_key, m_val in _HTTP_LAST_MODIFIED.items():
         if m_key in val:
-            val = val.replace(m_key, m_val)
+            val = val.replace(m_key, m_val, 1)
             break
-    return datetime.strptime(val, "%d %m %Y %H:%M:%S %Z")
+    return datetime.strptime(
+        val.replace("GMT", "+0000"), "%d %m %Y %H:%M:%S %z"
+    )  # `%Z` does not work, see https://bugs.python.org/issue22377`
 
 
 def str_or_repr(obj: object) -> str:
