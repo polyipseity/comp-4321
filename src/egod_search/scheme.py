@@ -266,10 +266,13 @@ LIMIT ?""",
                 async for page in pages:
                     fp.write(separator)
                     separator = f"{'-' * 100}\n"
+
                     fp.write(page[pages_keys.index("main.pages.title")] or "(no title)")
                     fp.write("\n")
+
                     fp.write(page[pages_keys.index("main.urls.content")])
                     fp.write("\n")
+
                     mod_time = page[pages_keys.index("main.pages.mod_time")]
                     fp.write(
                         "(no last modification time)"
@@ -277,6 +280,7 @@ LIMIT ?""",
                         else datetime.fromtimestamp(mod_time, timezone.utc).isoformat()
                     )
                     fp.write(f", {len(page[pages_keys.index('main.pages.text')])}\n")
+
                     words_keys = (
                         "main.word_occurrences.frequency",
                         "main.word_occurrences.word_id",
@@ -302,18 +306,26 @@ LIMIT ?""",
                                 f"{word[words_keys.index('main.words.content')]} {word[words_keys.index('main.word_occurrences.frequency')]}"
                             )
                     fp.write("\n")
+
+                    links_keys = ("main.urls.content",)
                     links = loads(page[pages_keys.index("main.pages.links")])
                     async with self._conn.execute_fetchall(
                         f"""
-SELECT content
+SELECT {', '.join(links_keys)}
 FROM main.urls
 WHERE rowid IN ({', '.join('?' * len(links))})
 ORDER BY content
 LIMIT ?""",
                         (*links, link_count),
                     ) as links:
-                        fp.write("\n".join(link[0] for link in links))
+                        fp.write(
+                            "\n".join(
+                                link[links_keys.index("main.urls.content")]
+                                for link in links
+                            )
+                        )
                     fp.write("\n")
+
                     progress.update()
 
     async def summary_s(self, *args: Any, **kwargs: Any) -> str:
