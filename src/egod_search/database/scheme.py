@@ -60,13 +60,9 @@ class Scheme:
         Mapping from words to their positions. Positions are unique and sorted.
         """
 
-    CREATE_DATABASE_SCRIPT = (
+    _CREATE_DATABASE_SCRIPT = (
         files(__package__ or "") / ".." / "res" / "create_database.sql"
     ).read_text()
-    """
-    Script to create database.
-    """
-
     __slots__ = ("_conn", "_own_conn")
 
     def __init__(self, conn: Connection, *, own_conn: bool = True) -> None:
@@ -89,7 +85,7 @@ class Scheme:
         """
         if self._own_conn:
             await self._conn.__aenter__()
-        await self._conn.executescript(self.CREATE_DATABASE_SCRIPT)
+        await self._conn.executescript(self._CREATE_DATABASE_SCRIPT)
         await self._conn.commit()
         return self
 
