@@ -14,8 +14,8 @@ SET links = (
     SELECT json_group_array(value)
     FROM (
         SELECT iif(value = OLD.rowid, NEW.rowid, OLD.rowid) AS value
-        ORDER BY value
         FROM json_each(links)
+        ORDER BY value
       )
   )
 WHERE EXISTS (
@@ -106,7 +106,7 @@ CREATE TABLE IF NOT EXISTS main.word_occurrences (
   page_id INTEGER NOT NULL REFERENCES pages(rowid) ON UPDATE CASCADE ON DELETE RESTRICT,
   word_id INTEGER NOT NULL REFERENCES words(rowid) ON UPDATE CASCADE ON DELETE RESTRICT,
   positions TEXT NOT NULL,
-  -- type: JSON, sorted list of unique integers
+  -- type: JSON, sorted list of unique nonnegative integers
   frequency INTEGER NOT NULL GENERATED ALWAYS AS (json_array_length(positions)) STORED,
   PRIMARY KEY (page_id, word_id)
 ) STRICT,
@@ -123,6 +123,9 @@ SELECT raise(ABORT, 'duplicated values')
 FROM json_each(NEW.positions)
 GROUP BY value
 HAVING count(*) > 1;
+SELECT raise(ABORT, 'negative values')
+FROM json_each(NEW.positions)
+WHERE value < 0;
 SELECT raise(ABORT, 'unsorted list')
 WHERE json(NEW.positions) != (
     SELECT json_group_array(value)
@@ -145,6 +148,9 @@ SELECT raise(ABORT, 'duplicated values')
 FROM json_each(NEW.positions)
 GROUP BY value
 HAVING count(*) > 1;
+SELECT raise(ABORT, 'negative values')
+FROM json_each(NEW.positions)
+WHERE value < 0;
 SELECT raise(ABORT, 'unsorted list')
 WHERE json(NEW.positions) != (
     SELECT json_group_array(value)
