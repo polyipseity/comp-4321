@@ -27,9 +27,16 @@ class Crawler:
     Supported URL schemes.
     """
 
-    class URLAlreadyVisited(Exception):
+    class URLAlreadyVisited(ValueError):
         """
         Exception for enqueueing an already visited URL.
+        """
+
+        __slots__ = ()
+
+    class CrawlError(RuntimeError):
+        """
+        Exception for crawling errors.
         """
 
         __slots__ = ()
@@ -78,7 +85,7 @@ class Crawler:
             raise ValueError(f"URL with invalid scheme: {url}")
         async with self._lock:
             if url in self._visited:
-                raise Crawler.URLAlreadyVisited(f"URL already visited: {url}")
+                raise self.URLAlreadyVisited(url)
             self._queue[url] = ...
 
     async def enqueue_many(self, urls: Collection[URL]) -> None:
@@ -91,14 +98,14 @@ class Crawler:
             raise ValueError(f"URL(s) with invalid scheme: {unsupported}")
         async with self._lock:
             if visited := self._visited & frozenset(urls):
-                raise Crawler.URLAlreadyVisited(f"URL(s) already visited: {visited}")
+                raise self.URLAlreadyVisited(*visited)
             self._queue.update((url, ...) for url in urls)
 
     async def crawl(self) -> tuple[ClientResponse, Collection[URL]]:
         """
         Crawl a queued URL, enqueue the discovered URLs, and return the response and discovered URLs.
 
-        Raises `TypeError` if there are no queued URLs.
+        Raises `TypeError` if there are no queued URLs. Raises `CrawlError` if we failed to crawl.
         """
         async with self._lock:
             try:
@@ -108,42 +115,47 @@ class Crawler:
             self._visited.add(href_url)
             del self._queue[href_url]
 
-        async with self._session.get(href_url) as response:
-            content = await response.text()
-        if not response.ok or response.content_type not in {
-            "application/xhtml+xml",
-            "application/xml",
-            "text/html",
-        }:
-            return response, ()
+        try:
+            async with self._session.get(href_url) as response:
+                content = await response.text()
+            if not response.ok or response.content_type not in {
+                "application/xhtml+xml",
+                "application/xml",
+                "text/html",
+            }:
+                return response, ()
 
-        outbound_urls = list[URL]()
-        for a_tag in BeautifulSoup(
-            content, "html.parser", parse_only=SoupStrainer("a")
-        ):
-            assert isinstance(a_tag, Tag)
-            try:
-                hrefs = a_tag["href"]
-            except KeyError:
-                continue
-            if isinstance(hrefs, str):
-                hrefs = (hrefs,)
-            for href in hrefs:
-                href_url = URL(href)
-                if href_url.is_absolute():
-                    outbound_urls.append(href_url)
-                else:
-                    outbound_urls.append(response.url.join(href_url))
+            outbound_urls = list[URL]()
+            for a_tag in BeautifulSoup(
+                content, "html.parser", parse_only=SoupStrainer("a")
+            ):
+                assert isinstance(a_tag, Tag)
+                try:
+                    hrefs = a_tag["href"]
+                except KeyError:
+                    continue
+                if isinstance(hrefs, str):
+                    hrefs = (hrefs,)
+                for href in hrefs:
+                    href_url = URL(href)
+                    if href_url.is_absolute():
+                        outbound_urls.append(href_url)
+                    else:
+                        outbound_urls.append(response.url.join(href_url))
 
-        async with self._lock:
-            self._visited |= frozenset(redirect.url for redirect in response.history)
-            self._queue.update(
-                (outbound_url, ...)
-                for outbound_url in outbound_urls
-                if outbound_url not in self._visited
-            )
+            async with self._lock:
+                self._visited |= frozenset(
+                    redirect.url for redirect in response.history
+                )
+                self._queue.update(
+                    (outbound_url, ...)
+                    for outbound_url in outbound_urls
+                    if outbound_url not in self._visited
+                )
 
-        return response, outbound_urls
+            return response, outbound_urls
+        except Exception as exc:
+            raise self.CrawlError(href_url) from exc
 
     @property
     def queue(self) -> Sequence[URL]:
