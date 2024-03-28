@@ -29,14 +29,17 @@ def default_transform(text: str) -> Iterator[tuple[int, str]]:
 def normalize_text_for_search(text: str) -> str:
     """
     Normalize text for searching by doing the following:
-    - Normalize the word into Unicode Normalization Form D (NFD).
+    - Normalize the word into Unicode Normalization Compatibility Form D (NFKD).
+      This is for removing diacritics in the next step.
+      Also, very similar looking characters are converted into the normal characters, such as `𝐀` to `A`.
     - Remove non-alphanumeric characters. This also removes diacritics.
-    - Normalize the word into Unicode Normalization Form C (NFC).
+    - Normalize the word into Unicode Normalization Compatibility Form C (NFKC).
+      This merges decomposed characters back into their normal form.
     - Convert to lowercase.
     """
-    text = normalize("NFD", text)
+    text = normalize("NFKD", text)
     text = "".join(filter(str.isalnum, text))
-    text = normalize("NFC", text)
+    text = normalize("NFKC", text)
     text = text.lower()
     return text
 
