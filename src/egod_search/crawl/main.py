@@ -32,6 +32,8 @@ async def main(
     summary_count: int | None,
     concurrency: int,
     show_progress: bool,
+    keyword_count: int | None = 10,
+    link_count: int | None = 10,
 ) -> None:
     """
     Main program.
@@ -155,8 +157,8 @@ async def main(
         if summary_path is not None:
             await summary_path.write_text(
                 await summary_s(
-                    database, count=summary_count, show_progress=show_progress
-                )
+                    database, count=summary_count, show_progress=show_progress, keyword_count=keyword_count, link_count=link_count
+                ), encoding="utf-8"
             )
 
 
@@ -225,6 +227,20 @@ def parser(parent: Callable[..., ArgumentParser] | None = None) -> ArgumentParse
         dest="show_progress",
         help="disable showing progress; default enable",
     )
+    parser.add_argument(
+        "-k",
+        "--keyword-count",
+        type=int,
+        default=10,
+        help="maximum keywords per result; default 10; use -1 for showing all links",
+    )
+    parser.add_argument(
+        "-l",
+        "--link-count",
+        type=int,
+        default=10,
+        help="maximum links per result; default 10; use -1 for showing all links",
+    )
 
     @wraps(main)
     async def invoke(args: Namespace):
@@ -236,6 +252,8 @@ def parser(parent: Callable[..., ArgumentParser] | None = None) -> ArgumentParse
             summary_count=args.summary_count,
             concurrency=args.concurrency,
             show_progress=args.show_progress,
+            keyword_count=args.keyword_count,
+            link_count=args.link_count,
         )
 
     parser.set_defaults(invoke=invoke)
