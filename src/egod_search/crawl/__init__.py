@@ -174,4 +174,4 @@ class Crawler:
 
 if "unittest" in modules:
     from .test_main import *
-    from .test_print import *
+    from .test_output import *

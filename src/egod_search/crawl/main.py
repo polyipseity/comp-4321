@@ -18,7 +18,7 @@ from .._util import parse_http_datetime
 from ..crawl import Crawler
 from ..database.scheme import Scheme
 from ..index.transform import default_transform
-from .print import summary_s
+from .output import summary_s
 
 _PROGRAM = __package__ or __name__
 
