@@ -191,7 +191,7 @@ ORDER BY CASE content {' '.join(('WHEN ? THEN ?',) * len(vals))} END""",
 SELECT mod_time FROM main.pages WHERE rowid = ?""",
             (url_id,),
         )
-        if old_mod_time is None or page.mod_time <= old_mod_time:
+        if old_mod_time is not None and page.mod_time <= old_mod_time:
             return False
 
         await self._conn.execute(
