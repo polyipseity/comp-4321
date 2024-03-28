@@ -43,13 +43,18 @@ class Scheme:
             TITLE = "title"
 
             @cached_property
+            def is_default(self):
+                """
+                Whether this is the default word occurrence type.
+                """
+                return self == self.PLAINTEXT
+
+            @cached_property
             def table_suffix(self):
                 """
                 Table suffix for this word occurrence type.
                 """
-                if self == self.PLAINTEXT:
-                    return ""
-                return f"_{self}"
+                return "" if self.is_default else f"_{self}"
 
         url: URL
         """

@@ -51,14 +51,14 @@ SELECT count(*) FROM main.pages""",
         async with self.conn.execute(
             f"""
 SELECT {', '.join(pages_keys)}
-FROM main.pages INNER JOIN main.urls ON main.urls.rowid = main.pages.rowid
-ORDER BY main.pages.rowid
+FROM main.pages INNER JOIN main.urls USING (rowid)
+ORDER BY rowid
 LIMIT ?""",
             (-1 if count is None else count,),
         ) as pages:
             async for page in pages:
                 fp.write(separator)
-                separator = f"{'-' * 30}\n" # 100
+                separator = f"{'-' * 30}\n"  # 100
 
                 fp.write(page[pages_keys.index("main.pages.title")] or "(no title)")
                 fp.write("\n")
@@ -74,18 +74,26 @@ LIMIT ?""",
                 )  # number of bytes
                 fp.write("\n")
 
+                words_frequency_key = " + ".join(
+                    f"coalesce(word_occurrences{word_type.table_suffix}.frequency, 0)"
+                    for word_type in Scheme.Page.WordOccurrenceType
+                )
                 words_keys = (
-                    "sum(main.word_occurrences.frequency)",
-                    "main.word_occurrences.word_id",
+                    words_frequency_key,
                     "main.words.content",
+                )
+                words_outer_joins = " ".join(
+                    f"FULL OUTER JOIN (SELECT word_id, frequency FROM main.word_occurrences{word_type.table_suffix} WHERE page_id = ?1) AS word_occurrences{word_type.table_suffix} USING (word_id)"
+                    for word_type in Scheme.Page.WordOccurrenceType
+                    if not word_type.is_default
                 )
                 async with self.conn.execute(
                     f"""
 SELECT {', '.join(words_keys)}
-FROM main.word_occurrences INNER JOIN main.words ON main.words.rowid = main.word_occurrences.word_id
-WHERE page_id = ?
-GROUP BY main.word_occurrences.page_id, main.word_occurrences.word_id
-ORDER BY sum(main.word_occurrences.frequency) DESC, main.words.content ASC
+FROM (SELECT word_id, frequency FROM main.word_occurrences WHERE page_id = ?1) AS word_occurrences
+    {words_outer_joins}
+    INNER JOIN main.words ON main.words.rowid = word_id
+ORDER BY {words_frequency_key} DESC, main.words.content ASC
 LIMIT ?""",
                     (
                         page[pages_keys.index("main.pages.rowid")],
@@ -97,7 +105,7 @@ LIMIT ?""",
                         fp.write(word_separator)
                         word_separator = "; "
                         fp.write(
-                            f"{word[words_keys.index('main.words.content')]} {word[words_keys.index('sum(main.word_occurrences.frequency)')]}"
+                            f"{word[words_keys.index('main.words.content')]} {word[words_keys.index(words_frequency_key)]}"
                         )
                 fp.write("\n")
 
