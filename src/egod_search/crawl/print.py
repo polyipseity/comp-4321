@@ -58,7 +58,7 @@ LIMIT ?""",
         ) as pages:
             async for page in pages:
                 fp.write(separator)
-                separator = f"{'-' * 100}\n"
+                separator = f"{'-' * 30}\n" # 100
 
                 fp.write(page[pages_keys.index("main.pages.title")] or "(no title)")
                 fp.write("\n")
