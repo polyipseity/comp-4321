@@ -87,8 +87,12 @@ async def main(
                     text = await text
 
                     html = BeautifulSoup(text, "html.parser")
-                    title = "" if html.title is None else html.title.string or ""
-                    plaintext = html.text
+                    title = (
+                        ""
+                        if html.title is None
+                        else str(html.title)[len("<title>") : -len("</title>")]
+                    )
+                    plaintext = html.get_text("\n")
 
                     word_occurrences = defaultdict[
                         str,
