@@ -186,8 +186,8 @@ def parser(parent: Callable[..., ArgumentParser] | None = None) -> ArgumentParse
         "-c",
         "--concurrency",
         type=int,
-        default=10,
-        help="maximum number of concurrent requests; default 10",
+        default=1,
+        help="maximum number of concurrent requests; a value of more than 1 makes the crawling order nondeterministic; default 1",
     )
     parser.add_argument(
         "--no-progress",
