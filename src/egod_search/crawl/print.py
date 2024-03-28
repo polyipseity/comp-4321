@@ -67,14 +67,12 @@ LIMIT ?""",
                 fp.write("\n")
 
                 mod_time = page[pages_keys.index("main.pages.mod_time")]
+                fp.write(datetime.fromtimestamp(mod_time, timezone.utc).isoformat())
+                fp.write(", ")
                 fp.write(
-                    "(no last modification time)"
-                    if mod_time is None
-                    else datetime.fromtimestamp(mod_time, timezone.utc).isoformat()
-                )
-                fp.write(
-                    f", {page[pages_keys.index('main.pages.size')]}\n"
+                    str(page[pages_keys.index("main.pages.size")])
                 )  # number of bytes
+                fp.write("\n")
 
                 words_keys = (
                     "sum(main.word_occurrences.frequency)",

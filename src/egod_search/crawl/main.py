@@ -1,6 +1,7 @@
 # -*- coding: UTF-8 -*-
 from asyncio import TaskGroup, gather
 from collections import defaultdict
+from time import time
 from aiosqlite import connect
 from anyio import Path
 from argparse import ZERO_OR_MORE, ArgumentParser, Namespace
@@ -83,7 +84,7 @@ async def main(
                             ).timestamp()
                         )
                     except ValueError:
-                        mod_time = None
+                        mod_time = int(time())
                     text = await text
                     try:
                         size = int(response.headers.get("Content-Length", ""))
