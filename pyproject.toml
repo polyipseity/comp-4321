@@ -28,7 +28,7 @@ classifiers = [
 ]
 dependencies = [
 	"aiohttp>=3.9.0", # async request
-	"aiosqlite>=0.20.0", # async database
+	"aiosqlite>=0.20.0", # async SQLite database
 	"anyio>=4.3.0", # async file
 	"asyncstdlib>=3.12.0", # async utilities
 	"beautifulsoup4>=4.12.0", # parse HTML
