@@ -16,7 +16,7 @@ _WORD_REGEX = compile(r"\S+", flags=DOTALL)
 
 def default_transform(text: str) -> Iterator[tuple[int, str]]:
     words = split_words_iter(text)
-    words = ((pos, word.lower()) for pos, word in words)
+    words = ((pos, "".join(filter(str.isalnum, word.lower()))) for pos, word in words) # word.lower()
     words = remove_stop_words_iter(words)
     words = ((pos, porter(word)) for pos, word in words)
     return ((pos, word) for pos, word in words if word is not None)
