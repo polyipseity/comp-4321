@@ -51,15 +51,24 @@ class SupportsWrite(Protocol[_AnyStr_contra]):
 
 
 async def a_fetch_one(conn: Connection, *args: Any) -> Any:
+    """
+    Return the first row of query result if exists or `None`.
+    """
     return await (await conn.execute(*args)).fetchone()
 
 
 async def a_fetch_value(conn: Connection, *args: Any, default: Any = None) -> Any:
+    """
+    Return the first value of first row of query result if exists or `None`.
+    """
     ret = await a_fetch_one(conn, *args)
     return default if ret is None else ret[0]
 
 
 def parse_http_datetime(val: str) -> datetime:
+    """
+    Parse datetime format in HTTP headers.
+    """
     val = val[5:]
     for m_key, m_val in _HTTP_LAST_MODIFIED.items():
         if m_key in val:
