@@ -47,6 +47,7 @@ requires-python = ">=3.11.0"
 [project.scripts]
 egod-search-build = "egod_search._build:main"
 egod-search-crawl = "egod_search.crawl.__main__:main"
+egod-search-test = "egod_search._test:main"
 
 [project.urls]
 repository = "https://github.com/polyipseity/comp-4321.git"
