@@ -1,6 +1,7 @@
 # -*- coding: UTF-8 -*-
 from asyncio import TaskGroup, gather
 from collections import defaultdict
+from logging import INFO, basicConfig, getLogger
 from time import time
 from aiosqlite import connect
 from anyio import Path
@@ -8,7 +9,6 @@ from argparse import ZERO_OR_MORE, ArgumentParser, Namespace
 from asyncstdlib import islice as aislice
 from bs4 import BeautifulSoup, Tag
 from functools import wraps
-from sys import modules
 from tqdm.auto import tqdm
 from typing import Callable, Collection, MutableMapping, MutableSequence
 from yarl import URL
@@ -19,6 +19,8 @@ from ..crawl import Crawler
 from ..database.scheme import Scheme
 from ..index.transform import default_transform
 from .print import summary_s
+
+_PROGRAM = __package__ or __name__
 
 
 async def main(
@@ -34,6 +36,9 @@ async def main(
     """
     Main program.
     """
+
+    basicConfig(level=INFO)
+    logger = getLogger(_PROGRAM)
 
     if page_count is None:
         page_count = len(urls)
@@ -61,7 +66,15 @@ async def main(
                 if all(isinstance(response, TypeError) for response in responses):
                     break
                 for response in responses:
-                    if not isinstance(response, tuple) or not response[0].ok:
+                    if isinstance(response, BaseException):
+                        if isinstance(response, Exception):
+                            logger.exception("Failed to crawl", exc_info=response)
+                            continue
+                        raise RuntimeError() from response
+                    if not response[0].ok:
+                        logger.error(
+                            f"Failed to crawl '{response[0].url}': {response[0].status}"
+                        )
                         continue
                     yield response
 
@@ -151,10 +164,8 @@ def parser(parent: Callable[..., ArgumentParser] | None = None) -> ArgumentParse
     """
     Create an argument parser suitable for the main program. Pass a parser as `parent` to make this a subparser.
     """
-
-    prog = modules[__name__].__package__ or __name__
     parser = (ArgumentParser if parent is None else parent)(
-        prog=f"python -m {prog}",
+        prog=f"python -m {_PROGRAM}",
         description="crawl the internet",
         add_help=True,
         allow_abbrev=False,
@@ -164,7 +175,7 @@ def parser(parent: Callable[..., ArgumentParser] | None = None) -> ArgumentParse
         "-v",
         "--version",
         action="version",
-        version=f"{prog} v{VERSION}",
+        version=f"{_PROGRAM} v{VERSION}",
         help="print version and exit",
     )
     parser.add_argument(
