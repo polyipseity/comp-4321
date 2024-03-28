@@ -1,8 +1,9 @@
 # -*- coding: UTF-8 -*-
-from asyncio import Lock
-from types import EllipsisType, TracebackType
 from aiohttp import ClientResponse, ClientSession
+from asyncio import Lock
 from bs4 import BeautifulSoup, SoupStrainer, Tag
+from sys import modules
+from types import EllipsisType, TracebackType
 from typing import (
     AbstractSet,
     Collection,
@@ -157,3 +158,8 @@ class Crawler:
         Already visited URLs.
         """
         return frozenset(self._visited)
+
+
+if "unittest" in modules:
+    from .test_main import *
+    from .test_print import *

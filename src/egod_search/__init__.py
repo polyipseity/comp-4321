@@ -16,4 +16,7 @@ Package version.
 """
 
 if "unittest" in modules:
+    from .crawl import *
+    from .database import *
+    from .index import *
     from .test__util import *

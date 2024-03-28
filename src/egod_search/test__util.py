@@ -1,7 +1,7 @@
 # -*- coding: UTF-8 -*-
+from aiosqlite import connect
 from datetime import datetime, timezone
 from importlib.resources import files
-from aiosqlite import connect
 from unittest import IsolatedAsyncioTestCase, TestCase, main
 
 from . import PACKAGE_NAME

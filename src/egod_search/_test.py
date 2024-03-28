@@ -11,7 +11,7 @@ def main() -> None:
     """
     for key in tuple(modules):
         if key.startswith(PACKAGE_NAME):
-            del modules[key]  # reload this module to export tests
+            del modules[key]  # reload this package except this module to export tests
     test_main(module=PACKAGE_NAME)
 
 
