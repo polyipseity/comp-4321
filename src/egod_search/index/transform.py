@@ -2,11 +2,13 @@
 from functools import cache, wraps
 from importlib.resources import files
 from itertools import islice, pairwise, tee
-from re import DOTALL, compile
+from re import DOTALL, NOFLAG, compile
 from typing import Any, Iterable, Iterator, Sequence
+from unicodedata import normalize
 
 from .. import PACKAGE_NAME
 
+_DIACRITICS_REGEX = compile(r"[\u0300-\u036f]", flags=NOFLAG)
 _STOP_WORDS = frozenset(
     word.casefold()
     for word in (files(PACKAGE_NAME) / "res/stop_words.txt").read_text().splitlines()
@@ -14,22 +16,29 @@ _STOP_WORDS = frozenset(
 _WORD_REGEX = compile(r"\S+", flags=DOTALL)
 
 
-def clean_word(word: str) -> str:
-    """
-    Clean word to convert to lowercase and keep alphanumeric characters.
-    """
-    return "".join(filter(str.isalnum, word.lower()))
-
-
 def default_transform(text: str) -> Iterator[tuple[int, str]]:
     """
     Default text transformation pipeline.
     """
     words = split_words_iter(text)
-    words = ((pos, clean_word(word)) for pos, word in words)
+    words = ((pos, normalize_text_for_search(word)) for pos, word in words)
     words = remove_stop_words_iter(words)
     words = ((pos, porter(word)) for pos, word in words)
     return ((pos, word) for pos, word in words if word is not None)
+
+
+def normalize_text_for_search(text: str) -> str:
+    """
+    Normalize text for searching by doing the following:
+    - Remove diacritics.
+    - Normalize the word into Unicode Normalization Form C (NFC).
+    - Convert to lowercase.
+    - Remove non-alphanumeric characters.
+    """
+    text = _DIACRITICS_REGEX.sub("", normalize("NFD", text))
+    text = normalize("NFC", text)
+    text = text.lower()
+    return "".join(filter(str.isalnum, text))
 
 
 class _Porter:
@@ -111,7 +120,7 @@ class _Porter:
         """
         The Porter stemming algorithm.
         """
-        word = clean_word(word)
+        word = normalize_text_for_search(word)
         if len(word) <= 2:
             return word or None
         return self.strip_suffix(self.strip_prefix(word)) or None

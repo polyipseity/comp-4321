@@ -137,8 +137,7 @@ class Crawler:
                 return response, None, ()
 
             # detect charset, see https://www.w3.org/International/questions/qa-html-encoding-declarations
-            charset = response.charset
-            if not charset:
+            if not (charset := response.charset):
                 header = content[:1024].decode(errors="ignore")
                 for meta_tag in BeautifulSoup(
                     header, "html.parser", parse_only=SoupStrainer("meta")
