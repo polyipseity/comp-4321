@@ -1,15 +1,18 @@
 # -*- coding: UTF-8 -*-
-from os import chdir
-from pathlib import Path
+from sys import modules
 from unittest import main as test_main
+
+from . import PACKAGE_NAME
 
 
 def main() -> None:
     """
     Test this module.
     """
-    chdir(Path(__file__).parent)
-    test_main(module=None)
+    for key in tuple(modules):
+        if key.startswith(PACKAGE_NAME):
+            del modules[key]  # reload this module to export tests
+    test_main(module=PACKAGE_NAME)
 
 
 if __name__ == "__main__":
