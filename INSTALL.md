@@ -3,7 +3,7 @@
 **Step 1:**
 Set up a Python environment: Ensure that you have Python installed on your system. You can download the latest version of Python from the official Python website (https://www.python.org) and follow the installation instructions for your operating system.
 
-_Note: For Windows, you may want to install the Python launcher, enabling you to use `py` in place of `python` for consistently running the latest version of Python, avoiding any conflicts with third-party software and outdated Python versions._
+_Note: For Windows, you may want to install the Python launcher, enabling you to use `py` in place of `python` for consistently running the latest version of Python, avoiding any conflicts with third-party software and outdated Python versions. After doing so, replace all instances of `python` with `py` in the following commands._
 
 **Step 2:**
 Clone the repository: Open a terminal or command prompt and navigate to the directory where you want to clone the repository. Then, run the following command to clone the repository:
@@ -26,10 +26,8 @@ python -m venv venv
 This command creates a new virtual environment named "venv" in the "comp-4321" directory.
 
 The virtual environment can effectively avoid issues such as: 
-```
-ERROR: pip's dependency resolver does not currently take into account all the packages that are installed. This behaviour is the source of the following dependency conflicts.
-fastapi 0.104.1 requires anyio<4.0.0,>=3.7.1, but you have anyio 4.3.0 which is incompatible.
-```
+_ERROR: pip's dependency resolver does not currently take into account all the packages that are installed. This behaviour is the source of the following dependency conflicts.
+fastapi 0.104.1 requires anyio<4.0.0,>=3.7.1, but you have anyio 4.3.0 which is incompatible._
 
 **Step 5:**
 Activate the virtual environment: Activate the virtual environment using the appropriate command based on your operating system:
@@ -59,5 +57,5 @@ Run the crawler using the command for Phase 1.
 _Note: Check again to see if `(venv)` appears in the command prompt for using the virtual environment._
 
 ```
-python -m egod_search.crawl -n 30 -d database.json -s spider_result.txt https://www.cse.ust.hk/~kwtleung/COMP4321/testpage.htm
+python -m egod_search.crawl -n 30 -d database.db -s spider_result.txt https://www.cse.ust.hk/~kwtleung/COMP4321/testpage.htm
 ```
