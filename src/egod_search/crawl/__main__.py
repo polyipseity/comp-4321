@@ -5,7 +5,7 @@ from sys import argv
 from .main import parser
 
 
-def main():
+def main() -> None:
     """
     Main program.
     """

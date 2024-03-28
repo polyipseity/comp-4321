@@ -5,7 +5,10 @@ from PyInstaller.__main__ import run
 from . import NAME, PACKAGE_NAME
 
 
-def main():
+def main() -> None:
+    """
+    Build a native executable from this module.
+    """
     cwd = Path(__file__).parent
     run(
         (
