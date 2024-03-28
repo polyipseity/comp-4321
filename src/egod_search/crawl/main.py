@@ -6,7 +6,7 @@ from aiosqlite import connect
 from anyio import Path
 from argparse import ZERO_OR_MORE, ArgumentParser, Namespace
 from asyncstdlib import islice as aislice
-from bs4 import BeautifulSoup
+from bs4 import BeautifulSoup, Tag
 from functools import wraps
 from sys import modules
 from tqdm.auto import tqdm
@@ -95,6 +95,9 @@ async def main(
                         if html.title is None
                         else str(html.title)[len("<title>") : -len("</title>")]
                     )
+                    for title_tag in html.find_all("title"):
+                        title_tag: Tag
+                        title_tag.extract()
                     plaintext = html.get_text("\n")
                     try:
                         size = int(response.headers.get("Content-Length", ""))
