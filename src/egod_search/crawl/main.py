@@ -93,7 +93,9 @@ async def main(
                     title = (
                         ""
                         if html.title is None
-                        else str(html.title)[len("<title>") : -len("</title>")]
+                        else str(html.title)[
+                            len("<title>") : -len("</title>")
+                        ]  # Google Chrome displays text inside the `title` tag verbatim, including HTML tags. So `<title>a<span>b</span></title>` displays as `a<span>b</span>` instead of `ab`.
                     )
                     for title_tag in html.find_all("title"):
                         title_tag: Tag
@@ -118,7 +120,7 @@ async def main(
                         ].append(pos)
                     for pos, word in default_transform(plaintext):
                         word_occurrences[word][
-                            Scheme.Page.WordOccurrenceType.TEXT
+                            Scheme.Page.WordOccurrenceType.PLAINTEXT
                         ].append(pos)
 
                     await database.index_page(

@@ -106,11 +106,10 @@ END;
 CREATE TABLE IF NOT EXISTS main.word_occurrences (
   page_id INTEGER NOT NULL REFERENCES pages(rowid) ON UPDATE CASCADE ON DELETE RESTRICT,
   word_id INTEGER NOT NULL REFERENCES words(rowid) ON UPDATE CASCADE ON DELETE RESTRICT,
-  type TEXT NOT NULL CHECK(type IN ('text', 'title')),
   positions TEXT NOT NULL,
   -- type: JSON, sorted list of unique nonnegative integers
   frequency INTEGER NOT NULL GENERATED ALWAYS AS (json_array_length(positions)) STORED,
-  PRIMARY KEY (page_id, word_id, type)
+  PRIMARY KEY (page_id, word_id)
 ) STRICT,
 WITHOUT ROWID;
 DROP TRIGGER IF EXISTS main.word_occurrences_check_positions_insert;
@@ -141,6 +140,66 @@ END;
 DROP TRIGGER IF EXISTS main.word_occurrences_check_positions_update;
 CREATE TRIGGER main.word_occurrences_check_positions_update BEFORE
 UPDATE OF positions ON main.word_occurrences FOR EACH ROW BEGIN
+SELECT raise(ABORT, 'invalid JSON')
+WHERE json_valid(NEW.positions) & 3 = 0;
+SELECT raise(ABORT, 'not list of integers')
+FROM json_each(NEW.positions)
+WHERE type != 'integer';
+SELECT raise(ABORT, 'duplicated values')
+FROM json_each(NEW.positions)
+GROUP BY value
+HAVING count(*) > 1;
+SELECT raise(ABORT, 'negative values')
+FROM json_each(NEW.positions)
+WHERE value < 0;
+SELECT raise(ABORT, 'unsorted list')
+WHERE json(NEW.positions) != (
+    SELECT json_group_array(value)
+    FROM (
+        SELECT value
+        FROM json_each(NEW.positions)
+        ORDER BY value
+      )
+  );
+END;
+-- main.word_occurrences_title
+CREATE TABLE IF NOT EXISTS main.word_occurrences_title (
+  page_id INTEGER NOT NULL REFERENCES pages(rowid) ON UPDATE CASCADE ON DELETE RESTRICT,
+  word_id INTEGER NOT NULL REFERENCES words(rowid) ON UPDATE CASCADE ON DELETE RESTRICT,
+  positions TEXT NOT NULL,
+  -- type: JSON, sorted list of unique nonnegative integers
+  frequency INTEGER NOT NULL GENERATED ALWAYS AS (json_array_length(positions)) STORED,
+  PRIMARY KEY (page_id, word_id)
+) STRICT,
+WITHOUT ROWID;
+DROP TRIGGER IF EXISTS main.word_occurrences_title_check_positions_insert;
+CREATE TRIGGER main.word_occurrences_title_check_positions_insert BEFORE
+INSERT ON main.word_occurrences_title FOR EACH ROW BEGIN
+SELECT raise(ABORT, 'invalid JSON')
+WHERE json_valid(NEW.positions) & 3 = 0;
+SELECT raise(ABORT, 'not list of integers')
+FROM json_each(NEW.positions)
+WHERE type != 'integer';
+SELECT raise(ABORT, 'duplicated values')
+FROM json_each(NEW.positions)
+GROUP BY value
+HAVING count(*) > 1;
+SELECT raise(ABORT, 'negative values')
+FROM json_each(NEW.positions)
+WHERE value < 0;
+SELECT raise(ABORT, 'unsorted list')
+WHERE json(NEW.positions) != (
+    SELECT json_group_array(value)
+    FROM (
+        SELECT value
+        FROM json_each(NEW.positions)
+        ORDER BY value
+      )
+  );
+END;
+DROP TRIGGER IF EXISTS main.word_occurrences_title_check_positions_update;
+CREATE TRIGGER main.word_occurrences_title_check_positions_update BEFORE
+UPDATE OF positions ON main.word_occurrences_title FOR EACH ROW BEGIN
 SELECT raise(ABORT, 'invalid JSON')
 WHERE json_valid(NEW.positions) & 3 = 0;
 SELECT raise(ABORT, 'not list of integers')

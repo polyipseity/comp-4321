@@ -2,6 +2,7 @@
 from enum import StrEnum
 from aiosqlite import Connection
 from dataclasses import dataclass
+from functools import cached_property
 from importlib.resources import files
 from itertools import chain
 from json import dumps
@@ -38,8 +39,17 @@ class Scheme:
             Word occurrence type.
             """
 
-            TEXT = "text"
+            PLAINTEXT = "plaintext"
             TITLE = "title"
+
+            @cached_property
+            def table_suffix(self):
+                """
+                Table suffix for this word occurrence type.
+                """
+                if self == self.PLAINTEXT:
+                    return ""
+                return f"_{self}"
 
         url: URL
         """
@@ -200,25 +210,29 @@ INSERT OR REPLACE INTO main.pages(rowid, mod_time, text, plaintext, size, title,
         )
 
         # clear index
-        await self._conn.execute(
-            """
-DELETE FROM main.word_occurrences WHERE page_id = ?""",
-            (url_id,),
-        )
+        for word_type in Scheme.Page.WordOccurrenceType:
+            await self._conn.execute(
+                f"""
+DELETE FROM main.word_occurrences{word_type.table_suffix} WHERE page_id = ?""",
+                (url_id,),
+            )
 
         # index words
         word_ids = await self.word_ids(tuple(page.word_occurrences))
-        await self._conn.executemany(
-            """
-INSERT INTO main.word_occurrences(page_id, word_id, type, positions) VALUES (?, ?, ?, ?)""",
-            chain.from_iterable(
-                (
-                    (url_id, word_id, type, dumps(tuple(typed_pos)))
-                    for type, typed_pos in positions.items()
-                )
-                for positions, word_id in zip(
-                    page.word_occurrences.values(), word_ids, strict=True
-                )
-            ),
-        )
+        for word_type in Scheme.Page.WordOccurrenceType:
+            await self._conn.executemany(
+                f"""
+INSERT INTO main.word_occurrences{word_type.table_suffix}(page_id, word_id, positions) VALUES (?, ?, ?)""",
+                chain.from_iterable(
+                    (
+                        (url_id, word_id, dumps(tuple(typed_pos)))
+                        for type, typed_pos in positions.items()
+                        if type == word_type
+                    )
+                    for positions, word_id in zip(
+                        page.word_occurrences.values(), word_ids, strict=True
+                    )
+                ),
+            )
+
         return True
