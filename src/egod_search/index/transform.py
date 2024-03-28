@@ -15,6 +15,9 @@ _WORD_REGEX = compile(r"\S+", flags=DOTALL)
 
 
 def default_transform(text: str) -> Iterator[tuple[int, str]]:
+    """
+    Default text transformation pipeline.
+    """
     words = split_words_iter(text)
     words = ((pos, word.lower()) for pos, word in words)
     words = remove_stop_words_iter(words)
