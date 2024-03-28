@@ -15,6 +15,8 @@ from typing import (
 )
 from yarl import URL
 
+from .._util import parse_content_type
+
 
 class Crawler:
     """
@@ -22,6 +24,16 @@ class Crawler:
     """
 
     __slots__ = ("_lock", "_queue", "_session", "_visited")
+    SUPPORTED_CONTENT_TYPES = frozenset(
+        {
+            "application/xhtml+xml",
+            "application/xml",
+            "text/html",
+        }
+    )
+    """
+    Supported content types.
+    """
     SUPPORTED_SCHEMES = frozenset({"http", "https"})
     """
     Supported URL schemes.
@@ -101,9 +113,9 @@ class Crawler:
                 raise self.URLAlreadyVisited(*visited)
             self._queue.update((url, ...) for url in urls)
 
-    async def crawl(self) -> tuple[ClientResponse, Collection[URL]]:
+    async def crawl(self) -> tuple[ClientResponse, str | None, Collection[URL]]:
         """
-        Crawl a queued URL, enqueue the discovered URLs, and return the response and discovered URLs.
+        Crawl a queued URL, enqueue the discovered URLs, and return the response, content and discovered URLs.
 
         Raises `TypeError` if there are no queued URLs. Raises `CrawlError` if we failed to crawl.
         """
@@ -117,13 +129,48 @@ class Crawler:
 
         try:
             async with self._session.get(href_url) as response:
-                content = await response.text()
-            if not response.ok or response.content_type not in {
-                "application/xhtml+xml",
-                "application/xml",
-                "text/html",
-            }:
-                return response, ()
+                content = await response.read()
+            if (
+                not response.ok
+                or response.content_type not in self.SUPPORTED_CONTENT_TYPES
+            ):
+                return response, None, ()
+
+            # detect charset, see https://www.w3.org/International/questions/qa-html-encoding-declarations
+            charset = response.charset
+            if not charset:
+                header = content[:1024].decode(errors="ignore")
+                for meta_tag in BeautifulSoup(
+                    header, "html.parser", parse_only=SoupStrainer("meta")
+                ):
+                    assert isinstance(meta_tag, Tag)
+                    if (charset := meta_tag.get("charset")) and (
+                        isinstance(charset, str) or (charset := charset[0])
+                    ):
+                        break
+                    if (
+                        (
+                            (http_equiv := meta_tag.get("http-equiv"))
+                            and "Content-Type".casefold()
+                            in map(
+                                str.casefold,
+                                (
+                                    (http_equiv,)
+                                    if isinstance(http_equiv, str)
+                                    else http_equiv
+                                ),
+                            )
+                        )
+                        and (charset := meta_tag.get("content"))
+                        and (isinstance(charset, str) or (charset := charset[0]))
+                        and (
+                            charset := parse_content_type(str(charset))
+                        )  # `charset` might actually be `ContentMetaAttributeValue` instead
+                        and (charset := charset[1].get("charset"))
+                    ):
+                        break
+                    charset = None
+            content = content.decode(charset or "utf-8", errors="replace")
 
             outbound_urls = list[URL]()
             for a_tag in BeautifulSoup(
@@ -153,7 +200,7 @@ class Crawler:
                     if outbound_url not in self._visited
                 )
 
-            return response, outbound_urls
+            return response, content, outbound_urls
         except Exception as exc:
             raise self.CrawlError(href_url) from exc
 

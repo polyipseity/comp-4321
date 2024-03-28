@@ -1,5 +1,5 @@
 # -*- coding: UTF-8 -*-
-from asyncio import TaskGroup, gather
+from asyncio import gather
 from collections import defaultdict
 from logging import INFO, basicConfig, getLogger
 from time import time
@@ -84,73 +84,73 @@ async def main(
             desc="crawling",
             unit="pages",
         ) as progress:
-            async with TaskGroup() as tg:
-                async for response, outbound_urls in aislice(
-                    crawl_ok_responses(), page_count
-                ):
-                    text = tg.create_task(response.text())
-                    url = response.url
-                    try:
-                        mod_time = int(
-                            parse_http_datetime(
-                                response.headers.get(
-                                    "Last-Modified", response.headers.get("Date", "")
-                                )
-                            ).timestamp()
-                        )
-                    except ValueError:
-                        mod_time = int(time())
-                    text = await text
+            async for response, content, outbound_urls in aislice(
+                crawl_ok_responses(), page_count
+            ):
+                if content is None:
+                    continue
 
-                    html = BeautifulSoup(text, "html.parser")
-                    title = (
-                        ""
-                        if html.title is None
-                        else str(html.title)[
-                            len("<title>") : -len("</title>")
-                        ]  # Google Chrome displays text inside the `title` tag verbatim, including HTML tags. So `<title>a<span>b</span></title>` displays as `a<span>b</span>` instead of `ab`.
+                url = response.url
+                try:
+                    mod_time = int(
+                        parse_http_datetime(
+                            response.headers.get(
+                                "Last-Modified", response.headers.get("Date", "")
+                            )
+                        ).timestamp()
                     )
-                    for title_tag in html.find_all("title"):
-                        assert isinstance(title_tag, Tag)
-                        title_tag.extract()
-                    plaintext = html.get_text("\n")
-                    try:
-                        size = int(response.headers.get("Content-Length", ""))
-                    except ValueError:
-                        size = len(
-                            plaintext
-                        )  # number of characters in the plaintext, project requirement
+                except ValueError:
+                    mod_time = int(time())
 
-                    word_occurrences = defaultdict[
-                        str,
-                        MutableMapping[
-                            Scheme.Page.WordOccurrenceType, MutableSequence[int]
-                        ],
-                    ](lambda: defaultdict(list))
-                    for pos, word in default_transform(title):
-                        word_occurrences[word][
-                            Scheme.Page.WordOccurrenceType.TITLE
-                        ].append(pos)
-                    for pos, word in default_transform(plaintext):
-                        word_occurrences[word][
-                            Scheme.Page.WordOccurrenceType.PLAINTEXT
-                        ].append(pos)
+                html = BeautifulSoup(content, "html.parser")
+                title = (
+                    ""
+                    if html.title is None
+                    else str(html.title)[
+                        len("<title>") : -len("</title>")
+                    ]  # Google Chrome displays text inside the `title` tag verbatim, including HTML tags. So `<title>a<span>b</span></title>` displays as `a<span>b</span>` instead of `ab`.
+                )
+                for title_tag in html.find_all("title"):
+                    assert isinstance(title_tag, Tag)
+                    title_tag.extract()
+                plaintext = html.get_text("\n")
+                try:
+                    size = int(response.headers.get("Content-Length", ""))
+                except ValueError:
+                    size = len(
+                        plaintext
+                    )  # number of characters in the plaintext, project requirement
 
-                    await database.index_page(
-                        Scheme.Page(
-                            url=url,
-                            mod_time=mod_time,
-                            size=size,
-                            text=text,
-                            plaintext=plaintext,
-                            title=title,
-                            links=outbound_urls,
-                            word_occurrences=word_occurrences,
-                        ),
+                word_occurrences = defaultdict[
+                    str,
+                    MutableMapping[
+                        Scheme.Page.WordOccurrenceType, MutableSequence[int]
+                    ],
+                ](lambda: defaultdict(list))
+                for pos, word in default_transform(title):
+                    word_occurrences[word][Scheme.Page.WordOccurrenceType.TITLE].append(
+                        pos
                     )
+                for pos, word in default_transform(plaintext):
+                    word_occurrences[word][
+                        Scheme.Page.WordOccurrenceType.PLAINTEXT
+                    ].append(pos)
 
-                    await database.conn.commit()
-                    progress.update()
+                await database.index_page(
+                    Scheme.Page(
+                        url=url,
+                        mod_time=mod_time,
+                        size=size,
+                        text=content,
+                        plaintext=plaintext,
+                        title=title,
+                        links=outbound_urls,
+                        word_occurrences=word_occurrences,
+                    ),
+                )
+
+                await database.conn.commit()
+                progress.update()
 
         if summary_path is not None:
             await summary_path.write_text(
