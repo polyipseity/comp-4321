@@ -2,13 +2,12 @@
 from functools import cache, wraps
 from importlib.resources import files
 from itertools import islice, pairwise, tee
-from re import DOTALL, NOFLAG, compile
+from re import DOTALL, compile
 from typing import Any, Iterable, Iterator, Sequence
 from unicodedata import normalize
 
 from .. import PACKAGE_NAME
 
-_DIACRITICS_REGEX = compile(r"[\u0300-\u036f]", flags=NOFLAG)
 _STOP_WORDS = frozenset(
     word.casefold()
     for word in (files(PACKAGE_NAME) / "res/stop_words.txt").read_text().splitlines()
@@ -30,15 +29,16 @@ def default_transform(text: str) -> Iterator[tuple[int, str]]:
 def normalize_text_for_search(text: str) -> str:
     """
     Normalize text for searching by doing the following:
-    - Remove diacritics.
+    - Normalize the word into Unicode Normalization Form D (NFD).
+    - Remove non-alphanumeric characters. This also removes diacritics.
     - Normalize the word into Unicode Normalization Form C (NFC).
     - Convert to lowercase.
-    - Remove non-alphanumeric characters.
     """
-    text = _DIACRITICS_REGEX.sub("", normalize("NFD", text))
+    text = normalize("NFD", text)
+    text = "".join(filter(str.isalnum, text))
     text = normalize("NFC", text)
     text = text.lower()
-    return "".join(filter(str.isalnum, text))
+    return text
 
 
 class _Porter:
