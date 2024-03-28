@@ -88,10 +88,6 @@ async def main(
                     except ValueError:
                         mod_time = int(time())
                     text = await text
-                    try:
-                        size = int(response.headers.get("Content-Length", ""))
-                    except ValueError:
-                        size = len(text.encode())  # number of bytes
 
                     html = BeautifulSoup(text, "html.parser")
                     title = (
@@ -100,6 +96,12 @@ async def main(
                         else str(html.title)[len("<title>") : -len("</title>")]
                     )
                     plaintext = html.get_text("\n")
+                    try:
+                        size = int(response.headers.get("Content-Length", ""))
+                    except ValueError:
+                        size = len(
+                            plaintext
+                        )  # number of characters in the plaintext, project requirement
 
                     word_occurrences = defaultdict[
                         str,
