@@ -71,7 +71,7 @@ class Scheme:
         """
         word_occurrences: Mapping[str, Mapping[WordOccurrenceType, Collection[int]]]
         """
-        Mapping from words to their types and positions. Positions are unique and sorted.
+        Mapping from words to their types and positions in the plaintext. Positions are a sorted list of unique nonnegative integers.
         """
 
     _CREATE_DATABASE_SCRIPT = (
