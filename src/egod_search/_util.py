@@ -59,7 +59,7 @@ async def a_fetch_value(conn: Connection, *args: Any, default: Any = None) -> An
     return default if ret is None else ret[0]
 
 
-def parse_http_last_modified(val: str) -> datetime:
+def parse_http_datetime(val: str) -> datetime:
     val = val[5:]
     for m_key, m_val in _HTTP_LAST_MODIFIED.items():
         if m_key in val:

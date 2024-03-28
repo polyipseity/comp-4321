@@ -5,13 +5,13 @@ from importlib.resources import files
 from unittest import IsolatedAsyncioTestCase, TestCase, main
 
 from . import PACKAGE_NAME
-from ._util import a_fetch_one, a_fetch_value, parse_http_last_modified
+from ._util import a_fetch_one, a_fetch_value, parse_http_datetime
 
 
 class HTTPTestCase(TestCase):
     __slots__ = ()
 
-    def test_parse_http_last_modified(self) -> None:
+    def test_parse_http_datetime(self) -> None:
         for input, output in {
             "Thu, 01 Jan 1970 00:00:00 GMT": datetime(
                 1970, 1, 1, 0, 0, tzinfo=timezone.utc
@@ -206,7 +206,7 @@ class HTTPTestCase(TestCase):
                 2023, 9, 28, 1, 0, 52, tzinfo=timezone.utc
             ),
         }.items():
-            self.assertEqual(output, parse_http_last_modified(input))
+            self.assertEqual(output, parse_http_datetime(input))
         for input in (
             "Sun, 31 Sep 2023 01:00:52 GMT",
             "23:01, 17 Jul 2013",
@@ -224,7 +224,7 @@ class HTTPTestCase(TestCase):
             "00:00, 10 August 2012",
         ):
             with self.assertRaises(ValueError, msg=input):
-                parse_http_last_modified(input)
+                parse_http_datetime(input)
 
 
 class SQLiteTestCase(IsolatedAsyncioTestCase):

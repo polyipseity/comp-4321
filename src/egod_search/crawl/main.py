@@ -14,7 +14,7 @@ from typing import Callable, Collection, MutableMapping, MutableSequence
 from yarl import URL
 
 from .. import VERSION
-from .._util import parse_http_last_modified
+from .._util import parse_http_datetime
 from ..crawl import Crawler
 from ..database.scheme import Scheme
 from ..index.transform import default_transform
@@ -79,8 +79,10 @@ async def main(
                     url = response.url
                     try:
                         mod_time = int(
-                            parse_http_last_modified(
-                                response.headers.get("Last-Modified", "")
+                            parse_http_datetime(
+                                response.headers.get(
+                                    "Last-Modified", response.headers.get("Date", "")
+                                )
                             ).timestamp()
                         )
                     except ValueError:
