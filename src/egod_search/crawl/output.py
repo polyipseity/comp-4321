@@ -13,17 +13,17 @@ async def summary(
     self: Scheme,
     fp: SupportsWrite[str],
     *,
-    count: int | None = None,
-    keyword_count: int | None = 10,
-    link_count: int | None = 10,
+    count: int = -1,
+    keyword_count: int = 10,
+    link_count: int = 10,
     show_progress: bool = False,
 ) -> None:
     """
     Write a summary of the database to `fp`.
 
-    `count` is the number of results to return. `None` means all results.
-    `keyword_count` is the number of keywords, most frequent first, per result. `None` means all keywords.
-    `link_count` is the number of links, ordered alphabetically, per result. `None` means all links.
+    `count` is the maximum number of results to return. Negative means all results.
+    `keyword_count` is the maximum number of keywords, most frequent first, per result. Negative values means all keywords.
+    `link_count` is the maximum number of links, ordered alphabetically, per result. Negative values means all links.
     `show_progress` is whether to show a progress bar.
     """
     total: int | None = await a_fetch_value(
@@ -31,7 +31,7 @@ async def summary(
         """
 SELECT count(*) FROM main.pages""",
     )
-    total = count if total is None else total if count is None else min(count, total)
+    total = count if total is None else total if count < 0 else min(count, total)
     separator = ""
     with tqdm(
         total=total,
@@ -54,7 +54,7 @@ SELECT {', '.join(pages_keys)}
 FROM main.pages INNER JOIN main.urls USING (rowid)
 ORDER BY rowid
 LIMIT ?""",
-            (-1 if count is None else count,),
+            (count,),
         ) as pages:
             async for page in pages:
                 fp.write(separator)
@@ -97,7 +97,7 @@ ORDER BY {words_frequency_key} DESC, main.words.content ASC
 LIMIT ?""",
                     (
                         page[pages_keys.index("main.pages.rowid")],
-                        -1 if keyword_count is None else keyword_count,
+                        keyword_count,
                     ),
                 ) as words:
                     word_separator = ""

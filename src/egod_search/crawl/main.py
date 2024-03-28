@@ -29,11 +29,11 @@ async def main(
     page_count: int | None,
     database_path: Path,
     summary_path: Path | None,
-    summary_count: int | None,
+    summary_count: int,
+    keyword_count: int,
+    link_count: int,
     concurrency: int,
     show_progress: bool,
-    keyword_count: int | None = 10,
-    link_count: int | None = 10,
 ) -> None:
     """
     Main program.
@@ -47,8 +47,6 @@ async def main(
 
     if page_count < 0:
         raise ValueError(f"Page count must be nonnegative: {page_count}")
-    if summary_count is not None and summary_count < 0:
-        raise ValueError(f"Summary count must be nonnegative: {summary_count}")
     if concurrency <= 0:
         raise ValueError(f"Concurrency must be positive: {concurrency}")
 
@@ -157,8 +155,13 @@ async def main(
         if summary_path is not None:
             await summary_path.write_text(
                 await summary_s(
-                    database, count=summary_count, show_progress=show_progress, keyword_count=keyword_count, link_count=link_count
-                ), encoding="utf-8"
+                    database,
+                    count=summary_count,
+                    keyword_count=keyword_count,
+                    link_count=link_count,
+                    show_progress=show_progress,
+                ),
+                encoding="utf-8",
             )
 
 
@@ -211,35 +214,35 @@ def parser(parent: Callable[..., ArgumentParser] | None = None) -> ArgumentParse
     parser.add_argument(
         "--summary-count",
         type=int,
-        default=None,
-        help="maximum number results in summary; default all",
-    )
-    parser.add_argument(
-        "-c",
-        "--concurrency",
-        type=int,
-        default=1,
-        help="maximum number of concurrent requests; a value of more than 1 makes the crawling order nondeterministic; default 1",
-    )
-    parser.add_argument(
-        "--no-progress",
-        action="store_false",
-        dest="show_progress",
-        help="disable showing progress; default enable",
+        default=-1,
+        help="maximum number results in summary, negative means all; default -1",
     )
     parser.add_argument(
         "-k",
         "--keyword-count",
         type=int,
         default=10,
-        help="maximum keywords per result; default 10; use -1 for showing all links",
+        help="maximum keywords per result, negative means all; default 10",
     )
     parser.add_argument(
         "-l",
         "--link-count",
         type=int,
         default=10,
-        help="maximum links per result; default 10; use -1 for showing all links",
+        help="maximum links per result, negative means all; default 10",
+    )
+    parser.add_argument(
+        "-c",
+        "--concurrency",
+        type=int,
+        default=1,
+        help="maximum number of concurrent requests, a value of more than 1 makes the crawling order nondeterministic; default 1",
+    )
+    parser.add_argument(
+        "--no-progress",
+        action="store_false",
+        dest="show_progress",
+        help="disable showing progress; default enable",
     )
 
     @wraps(main)
@@ -250,10 +253,10 @@ def parser(parent: Callable[..., ArgumentParser] | None = None) -> ArgumentParse
             database_path=args.database_path,
             summary_path=args.summary_path,
             summary_count=args.summary_count,
-            concurrency=args.concurrency,
-            show_progress=args.show_progress,
             keyword_count=args.keyword_count,
             link_count=args.link_count,
+            concurrency=args.concurrency,
+            show_progress=args.show_progress,
         )
 
     parser.set_defaults(invoke=invoke)
