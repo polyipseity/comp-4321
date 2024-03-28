@@ -207,6 +207,24 @@ class HTTPTestCase(TestCase):
             ),
         }.items():
             self.assertEqual(output, parse_http_last_modified(input))
+        for input in (
+            "Sun, 31 Sep 2023 01:00:52 GMT",
+            "23:01, 17 Jul 2013",
+            "2001-01-04 01:56:50",
+            "August 12, 2021, at 00:10 PM",
+            "Wednesday, 9 December, 2020, 01:47 GMT 02:47 UK",
+            "6/Jul/22 10:01:01",
+            "2028-01-28 13:59:01",
+            "Thursday, July 5, 2018 10:07:12 pm",
+            "Mon, 09 Oct 2045",
+            "23 Feb 01, 12:37",
+            "12 Aug 2047 - 21:05",
+            "2000-10-15 10:50",
+            "2029/04/20 23:57",
+            "00:00, 10 August 2012",
+        ):
+            with self.assertRaises(ValueError, msg=input):
+                parse_http_last_modified(input)
 
 
 class SQLiteTestCase(IsolatedAsyncioTestCase):
