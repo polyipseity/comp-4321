@@ -14,12 +14,19 @@ _STOP_WORDS = frozenset(
 _WORD_REGEX = compile(r"\S+", flags=DOTALL)
 
 
+def clean_word(word: str) -> str:
+    """
+    Clean word to convert to lowercase and keep alphanumeric characters.
+    """
+    return "".join(filter(str.isalnum, word.lower()))
+
+
 def default_transform(text: str) -> Iterator[tuple[int, str]]:
     """
     Default text transformation pipeline.
     """
     words = split_words_iter(text)
-    words = ((pos, word.lower()) for pos, word in words)
+    words = ((pos, clean_word(word)) for pos, word in words)
     words = remove_stop_words_iter(words)
     words = ((pos, porter(word)) for pos, word in words)
     return ((pos, word) for pos, word in words if word is not None)
@@ -104,16 +111,10 @@ class _Porter:
         """
         The Porter stemming algorithm.
         """
-        word = self.clean(word)
+        word = clean_word(word)
         if len(word) <= 2:
             return word or None
         return self.strip_suffix(self.strip_prefix(word)) or None
-
-    def clean(self, word: str) -> str:
-        """
-        Clean word to convert to lowercase and keep alphanumeric characters.
-        """
-        return "".join(filter(str.isalnum, word.lower()))
 
     def cvc(self, word: str) -> bool:
         """
