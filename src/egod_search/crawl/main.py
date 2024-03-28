@@ -85,6 +85,10 @@ async def main(
                     except ValueError:
                         mod_time = None
                     text = await text
+                    try:
+                        size = int(response.headers.get("Content-Length", ""))
+                    except ValueError:
+                        size = len(text.encode())  # number of bytes
 
                     html = BeautifulSoup(text, "html.parser")
                     title = (
@@ -112,11 +116,12 @@ async def main(
                     await database.index_page(
                         Scheme.Page(
                             url=url,
-                            title=title,
+                            mod_time=mod_time,
+                            size=size,
                             text=text,
                             plaintext=plaintext,
+                            title=title,
                             links=outbound_urls,
-                            mod_time=mod_time,
                             word_occurrences=word_occurrences,
                         ),
                     )

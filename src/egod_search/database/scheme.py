@@ -49,9 +49,13 @@ class Scheme:
         """
         Page title.
         """
+        size: int
+        """
+        Raw page content size in bytes.
+        """
         text: str
         """
-        Page content with markups.
+        Raw page content.
         """
         plaintext: str
         """
@@ -186,12 +190,13 @@ SELECT mod_time FROM main.pages WHERE rowid = ?""",
 
         await self._conn.execute(
             """
-INSERT OR REPLACE INTO main.pages(rowid, mod_time, text, plaintext, title, links) VALUES (?, ?, ?, ?, ?, ?)""",
+INSERT OR REPLACE INTO main.pages(rowid, mod_time, text, plaintext, size, title, links) VALUES (?, ?, ?, ?, ?, ?, ?)""",
             (
                 url_id,
                 page.mod_time,
                 page.text,
                 page.plaintext,
+                page.size,
                 page.title,
                 dumps(sorted(url_and_links_id[1:])),
             ),

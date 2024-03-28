@@ -44,6 +44,7 @@ CREATE INDEX IF NOT EXISTS main.words_content_index ON words (content ASC);
 CREATE TABLE IF NOT EXISTS main.pages (
   rowid INTEGER NOT NULL PRIMARY KEY REFERENCES urls(rowid) ON UPDATE CASCADE ON DELETE RESTRICT,
   mod_time INTEGER,
+  size INTEGER NOT NULL CHECK(size >= 0),
   text TEXT NOT NULL,
   plaintext TEXT NOT NULL,
   title TEXT NOT NULL,

@@ -44,7 +44,7 @@ SELECT count(*) FROM main.pages""",
             "main.pages.mod_time",
             "main.pages.plaintext",
             "main.pages.rowid",
-            "main.pages.text",
+            "main.pages.size",
             "main.pages.title",
             "main.urls.content",
         )
@@ -72,8 +72,9 @@ LIMIT ?""",
                     if mod_time is None
                     else datetime.fromtimestamp(mod_time, timezone.utc).isoformat()
                 )
-                text: str = page[pages_keys.index("main.pages.text")]
-                fp.write(f", {len(text.encode())}\n")  # number of bytes
+                fp.write(
+                    f", {page[pages_keys.index('main.pages.size')]}\n"
+                )  # number of bytes
 
                 words_keys = (
                     "sum(main.word_occurrences.frequency)",
