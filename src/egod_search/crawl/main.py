@@ -158,7 +158,7 @@ async def main(
             await summary_path.write_text(
                 await summary_s(
                     database, count=summary_count, show_progress=show_progress, keyword_count=keyword_count, link_count=link_count
-                )
+                ), encoding="utf-8"
             )
 
 
