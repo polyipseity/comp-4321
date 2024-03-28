@@ -185,12 +185,13 @@ ORDER BY CASE content {' '.join(('WHEN ? THEN ?',) * len(vals))} END""",
             (page.url, *{link: ... for link in page.links})
         )
         url_id = url_and_links_id[0]
-        old_mod_time: int | None = await a_fetch_value(
+        old_mod_time = await a_fetch_value(
             self._conn,
             """
 SELECT mod_time FROM main.pages WHERE rowid = ?""",
             (url_id,),
         )
+        assert isinstance(old_mod_time, int | None)
         if old_mod_time is not None and page.mod_time <= old_mod_time:
             return False
 

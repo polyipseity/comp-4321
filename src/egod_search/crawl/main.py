@@ -111,7 +111,7 @@ async def main(
                         ]  # Google Chrome displays text inside the `title` tag verbatim, including HTML tags. So `<title>a<span>b</span></title>` displays as `a<span>b</span>` instead of `ab`.
                     )
                     for title_tag in html.find_all("title"):
-                        title_tag: Tag
+                        assert isinstance(title_tag, Tag)
                         title_tag.extract()
                     plaintext = html.get_text("\n")
                     try:
