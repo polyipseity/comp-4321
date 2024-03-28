@@ -1,4 +1,6 @@
 # -*- coding: UTF-8 -*-
+from sys import modules
+
 
 NAME = "egod-search"  # synchronize with `pyproject.toml`
 """
@@ -12,3 +14,6 @@ VERSION = "1.0.0"
 """
 Package version.
 """
+
+if "unittest" in modules:
+    from .test__util import *
