@@ -51,7 +51,7 @@ async def main(
         raise ValueError(f"Concurrency must be positive: {concurrency}")
 
     async with (
-        Scheme(connect(database_path.__fspath__())) as database,
+        Scheme(connect(database_path.__fspath__()), init=True) as database,
         Crawler() as crawler,
     ):
 

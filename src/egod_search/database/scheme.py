@@ -92,14 +92,17 @@ class Scheme:
     _CREATE_DATABASE_SCRIPT = (
         files(PACKAGE_NAME) / "res/create_database.sql"
     ).read_text()
-    __slots__ = ("_conn", "_own_conn")
+    __slots__ = ("_conn", "_init", "_own_conn")
 
-    def __init__(self, conn: Connection, *, own_conn: bool = True) -> None:
+    def __init__(
+        self, conn: Connection, *, own_conn: bool = True, init: bool = False
+    ) -> None:
         """
         Apply this scheme to a database connection.
         """
-        self._own_conn = own_conn
         self._conn = conn
+        self._init = init
+        self._own_conn = own_conn
 
     @property
     def conn(self) -> Connection:
@@ -114,8 +117,9 @@ class Scheme:
         """
         if self._own_conn:
             await self._conn.__aenter__()
-        await self._conn.executescript(self._CREATE_DATABASE_SCRIPT)
-        await self._conn.commit()
+        if self._init:
+            await self._conn.executescript(self._CREATE_DATABASE_SCRIPT)
+            await self._conn.commit()
         return self
 
     async def __aexit__(
