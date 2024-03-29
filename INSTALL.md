@@ -3,7 +3,9 @@
 **Step 1:**
 Set up a Python environment: Ensure that you have Python installed on your system. You can download the latest version of Python from the official Python website (https://www.python.org) and follow the installation instructions for your operating system.
 
-_Note: For Windows, you may want to install the Python launcher, enabling you to use `py` in place of `python` for consistently running the latest version of Python, avoiding any conflicts with third-party software and outdated Python versions. After doing so, replace all instances of `python` with `py` in the following commands._
+_Note: For Windows, you may want to install the Python launcher, enabling you to use `py` in place of `python` for consistently running the latest version of Python, avoiding any conflicts with third-party software and outdated Python versions. 
+
+**After doing so, replace all instances of `python` with `py` in the following commands.**_
 
 **Step 2:**
 Clone the repository: Open a terminal or command prompt and navigate to the directory where you want to clone the repository. Then, run the following command to clone the repository:
@@ -12,6 +14,8 @@ git clone https://github.com/polyipseity/comp-4321.git
 ```
 This will create a new directory named "comp-4321" and clone the repository into it.
 
+_You may also download zip, but then you need to take care when navigating to the project directory in step 3_
+
 **Step 3:**
 Navigate to the project directory: Use the cd command to navigate to the project directory. Run the following command:
 ```
@@ -19,7 +23,7 @@ cd comp-4321
 ```
 
 **Step 4:**
-Create a virtual environment (optional but highly recommended): Given how other teams may also use Python, and the dependencies used between projects may have conflicts, it is highly recommended to create a virtual environment for running our project. To create a virtual environment, run the following command:
+**Create a virtual environment (optional but highly recommended): Given how other teams may also use Python, and the dependencies used between projects may have conflicts, it is highly recommended to create a virtual environment for running our project.** To create a virtual environment, run the following command:
 ```
 python -m venv venv
 ```
@@ -58,4 +62,16 @@ _Note: Check again to see if `(venv)` appears in the command prompt for using th
 
 ```
 python -m egod_search.crawl -n 30 -d database.db -s spider_result.txt https://www.cse.ust.hk/~kwtleung/COMP4321/testpage.htm
+```
+
+In case of re-run, and the database needs to be cleared, use the appropriate command based on your operating system:
+
+On Windows:
+```
+del database.db
+```
+
+On Linux or macOS:
+```
+rm database.db
 ```
