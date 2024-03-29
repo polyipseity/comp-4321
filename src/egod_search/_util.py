@@ -1,12 +1,12 @@
 # -*- coding: UTF-8 -*-
-from asyncio import Queue, gather, get_running_loop
+from asyncio import Queue, TaskGroup, get_running_loop
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import datetime
 from email.message import Message
 from multiprocessing.pool import Pool
 from sqlite3 import Row
 from aiosqlite import Connection
-from asyncstdlib import batched as abatched
 from typing import (
     AsyncIterable,
     AsyncIterator,
@@ -113,19 +113,19 @@ async def a_eager_map(
     """
     Async map that eagerly evaluates.
     """
-    loop = get_running_loop()
-    queue = Queue[_U | _Sentinel](max_size)
+    queue = Queue[Awaitable[_U] | _Sentinel](max_size)
 
     async def submit():
-        async for items in abatched(iterable, concurrency):
-            for item in await gather(*map(func, items)):
-                await queue.put(item)
+        with ThreadPoolExecutor(concurrency) as executor:
+            async for item in iterable:
+                await queue.put(executor.submit(func, item).result())
         await queue.put(_SENTINEL)
 
-    loop.create_task(submit())
-    while not isinstance(item := await queue.get(), _Sentinel):
-        queue.task_done()
-        yield item
+    async with TaskGroup() as tg:
+        tg.create_task(submit())
+        while not isinstance(item := await tg.create_task(queue.get()), _Sentinel):
+            queue.task_done()
+            yield await item
 
 
 async def a_pool_imap(
@@ -138,25 +138,26 @@ async def a_pool_imap(
     """
     `Pool.imap` for async.
     """
-    loop = get_running_loop()
     queue = Queue[Awaitable[_U] | _Sentinel](max_size)
 
     async def submit():
+        loop = get_running_loop()
         async for item in iterable:
-            fut = loop.create_future()
-            await queue.put(fut)
+            future = loop.create_future()
+            await queue.put(future)
             pool.apply_async(
                 func,
                 (item,),
-                callback=fut.set_result,
-                error_callback=fut.set_exception,
+                callback=future.set_result,
+                error_callback=future.set_exception,
             )
         await queue.put(_SENTINEL)
 
-    loop.create_task(submit())
-    while not isinstance(item := await queue.get(), _Sentinel):
-        queue.task_done()
-        yield await item
+    async with TaskGroup() as tg:
+        tg.create_task(submit())
+        while not isinstance(item := await tg.create_task(queue.get()), _Sentinel):
+            queue.task_done()
+            yield await item
 
 
 def parse_content_type(val: str) -> tuple[str, Mapping[str, str]] | None:
