@@ -1,7 +1,6 @@
 # -*- coding: UTF-8 -*-
 from asyncio import (
     Event,
-    InvalidStateError,
     Lock,
     Queue,
     QueueEmpty,
