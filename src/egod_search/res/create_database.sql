@@ -5,6 +5,7 @@ CREATE TABLE IF NOT EXISTS main.urls (
   redirect_id INTEGER DEFAULT NULL REFERENCES urls(rowid) ON UPDATE CASCADE ON DELETE RESTRICT
 ) STRICT;
 CREATE INDEX IF NOT EXISTS main.urls_content_index ON urls (content ASC);
+-- main.update_urls
 DROP TRIGGER IF EXISTS main.update_urls;
 CREATE TRIGGER main.update_urls
 AFTER
@@ -24,6 +25,7 @@ WHERE EXISTS (
     WHERE value = OLD.rowid
   );
 END;
+-- main.delete_urls
 DROP TRIGGER IF EXISTS main.delete_urls;
 CREATE TRIGGER main.delete_urls BEFORE DELETE ON main.urls FOR EACH ROW BEGIN
 SELECT raise(ABORT, 'cannot delete referenced URLs')
@@ -48,8 +50,9 @@ CREATE TABLE IF NOT EXISTS main.pages (
   text TEXT NOT NULL,
   plaintext TEXT NOT NULL,
   title TEXT NOT NULL,
-  links TEXT NOT NULL -- type: JSON, sorted list of unique urls(rowid)
+  links TEXT NOT NULL -- type: JSON, sorted list of unique urls(rowid); constraints: main.delete_urls, main.update_urls, main.word_occurrences_check_links_insert, main.word_occurrences_check_links_update
 ) STRICT;
+-- main.word_occurrences_check_links_insert
 DROP TRIGGER IF EXISTS main.word_occurrences_check_links_insert;
 CREATE TRIGGER main.word_occurrences_check_links_insert BEFORE
 INSERT ON main.pages FOR EACH ROW BEGIN
@@ -76,6 +79,7 @@ FROM json_each(NEW.links) AS links
   LEFT OUTER JOIN main.urls ON main.urls.rowid = links.value
 WHERE main.urls.rowid IS NULL;
 END;
+-- main.word_occurrences_check_links_update
 DROP TRIGGER IF EXISTS main.word_occurrences_check_links_update;
 CREATE TRIGGER main.word_occurrences_check_links_update BEFORE
 UPDATE OF links ON main.pages FOR EACH ROW BEGIN
@@ -107,11 +111,12 @@ CREATE TABLE IF NOT EXISTS main.word_occurrences (
   page_id INTEGER NOT NULL REFERENCES pages(rowid) ON UPDATE CASCADE ON DELETE RESTRICT,
   word_id INTEGER NOT NULL REFERENCES words(rowid) ON UPDATE CASCADE ON DELETE RESTRICT,
   positions TEXT NOT NULL,
-  -- type: JSON, sorted list of unique nonnegative integers
+  -- type: JSON, sorted list of unique nonnegative integers; constraints: main.word_occurrences_check_positions_insert, main.word_occurrences_check_positions_update
   frequency INTEGER NOT NULL GENERATED ALWAYS AS (json_array_length(positions)) STORED,
   PRIMARY KEY (page_id, word_id)
 ) STRICT,
 WITHOUT ROWID;
+-- main.word_occurrences_check_positions_insert
 DROP TRIGGER IF EXISTS main.word_occurrences_check_positions_insert;
 CREATE TRIGGER main.word_occurrences_check_positions_insert BEFORE
 INSERT ON main.word_occurrences FOR EACH ROW BEGIN
@@ -137,6 +142,7 @@ WHERE json(NEW.positions) != (
       )
   );
 END;
+-- main.word_occurrences_check_positions_update
 DROP TRIGGER IF EXISTS main.word_occurrences_check_positions_update;
 CREATE TRIGGER main.word_occurrences_check_positions_update BEFORE
 UPDATE OF positions ON main.word_occurrences FOR EACH ROW BEGIN
@@ -167,11 +173,12 @@ CREATE TABLE IF NOT EXISTS main.word_occurrences_title (
   page_id INTEGER NOT NULL REFERENCES pages(rowid) ON UPDATE CASCADE ON DELETE RESTRICT,
   word_id INTEGER NOT NULL REFERENCES words(rowid) ON UPDATE CASCADE ON DELETE RESTRICT,
   positions TEXT NOT NULL,
-  -- type: JSON, sorted list of unique nonnegative integers
+  -- type: JSON, sorted list of unique nonnegative integers; constraints: main.word_occurrences_title_check_positions_insert, main.word_occurrences_title_check_positions_update
   frequency INTEGER NOT NULL GENERATED ALWAYS AS (json_array_length(positions)) STORED,
   PRIMARY KEY (page_id, word_id)
 ) STRICT,
 WITHOUT ROWID;
+-- main.word_occurrences_title_check_positions_insert
 DROP TRIGGER IF EXISTS main.word_occurrences_title_check_positions_insert;
 CREATE TRIGGER main.word_occurrences_title_check_positions_insert BEFORE
 INSERT ON main.word_occurrences_title FOR EACH ROW BEGIN
@@ -197,6 +204,7 @@ WHERE json(NEW.positions) != (
       )
   );
 END;
+-- main.word_occurrences_title_check_positions_update
 DROP TRIGGER IF EXISTS main.word_occurrences_title_check_positions_update;
 CREATE TRIGGER main.word_occurrences_title_check_positions_update BEFORE
 UPDATE OF positions ON main.word_occurrences_title FOR EACH ROW BEGIN
