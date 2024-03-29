@@ -1,36 +1,77 @@
-# COMP4321 Search Engine Project
+# Installation instructions
 
-# Phase 1
+**Step 1:**
+Set up a Python environment: Ensure that you have Python installed on your system. You can download the latest version of Python from the official Python website (https://www.python.org) and follow the installation instructions for your operating system.
 
-- [x] Implement a spider (integrated with an indexer) for fetching (using BFS) and indexing
-- [x] Index 30 pages from https://www.cse.ust.hk/~kwtleung/COMP4321/testpage.htm or https://comp4321-hkust.github.io/testpages/testpage.htm (backup website)
-- [x] Implement a test program which reads data from the jdbm and outputs a plain-text file named spider_result.txt. The format of the spider_result.txt file should be as follows:
+_Note: For Windows, you may want to install the Python launcher, enabling you to use `py` in place of `python` for consistently running the latest version of Python, avoiding any conflicts with third-party software and outdated Python versions._
 
+_**After doing so, replace all instances of `python` with `py` in the following commands.**_
+
+**Step 2:**
+Clone the repository: Open a terminal or command prompt and navigate to the directory where you want to clone the repository. Then, run the following command to clone the repository:
 ```
-Page title
-URL
-Last modification date, size of page
-Keyword1 freq1; Keyword2 freq2; Keyword3 freq3; ... ...
-Child Link1
-Child Link2 ... ...
-——————————————– (The separator line should be a line of hyphens, i.e. -)
-Page title
-URL
-Last modification date, size of page
-Keyword1 freq1; Keyword2 freq2; Keyword3 freq3; ... ...
-Child Link1
-Child Link2 ... ...
-... ...
-... ...
+git clone https://github.com/polyipseity/comp-4321.git
+```
+This will create a new directory named "comp-4321" and clone the repository into it.
+
+_You may also download zip, but then you need to take care when navigating to the project directory in step 3_
+
+**Step 3:**
+Navigate to the project directory: Use the cd command to navigate to the project directory. Run the following command:
+```
+cd comp-4321
 ```
 
-- [x] The list of keywords/child links displays up to 10, and there is no requirement for the order.
+**Step 4:**
+**Create a virtual environment (optional but highly recommended): Given how other teams may also use Python, and the dependencies used between projects may have conflicts, it is highly recommended to create a virtual environment for running our project.** To create a virtual environment, run the following command:
+```
+python -m venv venv
+```
+This command creates a new virtual environment named "venv" in the "comp-4321" directory.
 
-We need to submit:
-- [ ] A document containing the design of the jdbm database scheme of the indexer. All supporting databases should be defined, for example, forward and inverted indexes, mapping tables for URL <=> page ID and word <=> word ID conversion. The jdbm database schema depends on the functions implemented. You should include an explanation of your design.
-- [x] The source codes of the spider and the test program
-- [ ] A readme.txt file containing the instructions to build the spider and the test program, and how to execute them.
-- [ ] The db file(s) which contain the indexed 30 pages starting from https://www.cse.ust.hk/~kwtleung/COMP4321/testpage.htm or https://comp4321-hkust.github.io/testpages/testpage.htm (backup website)
-- [x] spider_result.txt, which is the output of the test program
+The virtual environment can effectively avoid issues such as: 
+_ERROR: pip's dependency resolver does not currently take into account all the packages that are installed. This behaviour is the source of the following dependency conflicts.
+fastapi 0.104.1 requires anyio<4.0.0,>=3.7.1, but you have anyio 4.3.0 which is incompatible._
 
-Zip the files and submit via Canvas. The assignment name is Phase1.
+**Step 5:**
+Activate the virtual environment: Activate the virtual environment using the appropriate command based on your operating system:
+
+On Windows:
+```
+venv\Scripts\activate
+```
+
+On Linux or macOS:
+```
+source venv/bin/activate
+```
+
+**Step 6:**
+Install the required packages: In the root directory of the project (i.e., the "comp-4321" directory), there should be a file named "requirements.txt". To install the required packages, run the following command:
+
+_Note: Check again to see if `(venv)` appears in the command prompt for using the virtual environment._
+```
+pip install -r requirements.txt
+```
+This command will install all the necessary packages specified in the "requirements.txt" file.
+
+**Step 7:**
+Run the crawler using the command for Phase 1. 
+
+_Note: Check again to see if `(venv)` appears in the command prompt for using the virtual environment._
+
+```
+python -m egod_search.crawl -n 30 -d database.db -s spider_result.txt https://www.cse.ust.hk/~kwtleung/COMP4321/testpage.htm
+```
+
+In case of re-run, and the database needs to be cleared, use the appropriate command based on your operating system:
+
+On Windows:
+```
+del database.db
+```
+
+On Linux or macOS:
+```
+rm database.db
+```
