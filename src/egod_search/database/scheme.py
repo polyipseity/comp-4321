@@ -138,6 +138,8 @@ class Scheme:
         """
         Get IDs for URLs. Assigns new IDs if not already assigned.
         """
+        if not contents:
+            return ()
         vals = tuple(map(str, contents))
         await self._conn.executemany(
             """
@@ -164,6 +166,8 @@ ORDER BY CASE content {' '.join(('WHEN ? THEN ?',) * len(vals))} END""",
         """
         Get IDs for words. Assigns new IDs if not already assigned.
         """
+        if not contents:
+            return ()
         vals = contents
         await self._conn.executemany(
             """
