@@ -95,7 +95,7 @@ async def main(
                         # wait for new URLs or stop
                         await awake_crawl_event.wait()
 
-        async def crawl_to_index_bridge(consumer_count: int):
+        async def crawl_to_index_pipe(consumer_count: int):
             # only one instance allowed
             while stopping_crawl_semaphore.locked():
                 await sleep(0)
@@ -239,11 +239,18 @@ async def main(
         ) as progress:
             await crawler.enqueue_many(urls)
             async with TaskGroup() as tg:
-                for _ in range(request_concurrency):
-                    tg.create_task(crawl())
-                tg.create_task(crawl_to_index_bridge(database_concurrency))
-                for _ in range(database_concurrency):
-                    tg.create_task(index(progress.update))
+                try:
+                    for _ in range(request_concurrency):
+                        tg.create_task(crawl())
+                    tg.create_task(crawl_to_index_pipe(database_concurrency))
+                    await gather(
+                        *(
+                            tg.create_task(index(progress.update))
+                            for _ in range(database_concurrency)
+                        )
+                    )
+                finally:
+                    crawling = False  # required to stop the crawling
 
     if summary_path is not None:
         async with Scheme(connect(database_path.__fspath__())) as database:
