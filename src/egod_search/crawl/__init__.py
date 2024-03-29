@@ -24,6 +24,10 @@ class Crawler:
     """
 
     __slots__ = ("_lock", "_queue", "_session", "_visited")
+    Result = tuple[ClientResponse, str | None, Sequence[URL]]
+    """
+    Crawl result type.
+    """
     SUPPORTED_CONTENT_TYPES = frozenset(
         {
             "application/xhtml+xml",
@@ -133,7 +137,7 @@ class Crawler:
             del self._queue[url]
         return url
 
-    async def crawl(self, url: URL) -> tuple[ClientResponse, str | None, Sequence[URL]]:
+    async def crawl(self, url: URL) -> Result:
         """
         Crawl the provided URL, enqueue the discovered URLs, and return the response, content and discovered URLs.
 

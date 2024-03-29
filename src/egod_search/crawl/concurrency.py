@@ -1,12 +1,18 @@
 # -*- coding: UTF-8 -*-
-from asyncio import Event, Lock, Queue, QueueEmpty, Semaphore, TaskGroup, sleep
+from asyncio import (
+    Event,
+    Lock,
+    Queue,
+    QueueEmpty,
+    Semaphore,
+    TaskGroup,
+    get_running_loop,
+    sleep,
+)
 from types import TracebackType
-from typing import AsyncIterator, Sequence, Type
-from aiohttp import ClientResponse
-from yarl import URL
+from typing import AsyncIterator, Awaitable, Type
 
 from . import Crawler
-from .._util import Value
 
 
 class ConcurrentCrawler:
@@ -16,7 +22,6 @@ class ConcurrentCrawler:
     Runs until there are no more links to be crawled or is manually stopped. Cannot be reused afterwards.
     """
 
-    _ValueType = tuple[ClientResponse, str | None, Sequence[URL]] | BaseException
     __slots__ = (
         "_awake",
         "_crawler",
@@ -38,12 +43,12 @@ class ConcurrentCrawler:
         self._crawler = crawler
         self._dequeue_lock = Lock()
         self._init_concurrency = init_concurrency
-        self._queue = Queue[Value[tuple[Event, self._ValueType | None]]](max_size)
+        self._queue = Queue[Awaitable[Crawler.Result | BaseException]](max_size)
         self._running = True
         self._stopping = Semaphore(0)
         self._tasks = TaskGroup()
 
-    async def __aenter__(self) -> AsyncIterator[_ValueType]:
+    async def __aenter__(self) -> AsyncIterator[Crawler.Result | BaseException]:
         """
         Start the crawler.
         """
@@ -71,29 +76,21 @@ class ConcurrentCrawler:
         Can be started multiple times. Cannot start again after stopping.
         """
         # always BFS, even if there are multiple instances
+        loop = get_running_loop()
         self._stopping.release()
         while self._running:
-            event = Event()
-            value = Value[tuple[Event, self._ValueType | None]]((event, None))
-            is_empty = False
-            await self._queue.put(value)
+            await self._queue.put((future := loop.create_future()))
             try:
                 async with self._dequeue_lock:
                     url = await self._crawler.dequeue()
-                value.val = (event, await self._crawler.crawl(url))
-            except QueueEmpty as exc:
-                # no URLs to crawl
-                value.val = (event, exc)
-                is_empty = True
+                future.set_result(await self._crawler.crawl(url))
             except BaseException as exc:
-                value.val = (event, exc)
-            finally:
-                event.set()
-
-            if is_empty:
-                async with self._stopping:
-                    # wait for new URLs or stop
-                    await self._awake.wait()
+                future.set_result(exc)
+                if isinstance(exc, QueueEmpty):
+                    # no URLs to crawl
+                    async with self._stopping:
+                        # wait for new URLs or stop
+                        await self._awake.wait()
 
     def stop(self) -> None:
         """
@@ -102,7 +99,7 @@ class ConcurrentCrawler:
         self._running = False
         self._awake.set()
 
-    async def pipe(self) -> AsyncIterator[_ValueType]:
+    async def pipe(self) -> AsyncIterator[Crawler.Result | BaseException]:
         """
         Pipe the output. Outbound links are added as output are piped from this iterator.
 
@@ -125,14 +122,12 @@ class ConcurrentCrawler:
                     break
             try:
                 new_urls = None
-                if value.val[1] is None:
-                    await value.val[0].wait()
-                    assert value.val[1] is not None
-                if not isinstance((val1 := value.val[1]), QueueEmpty):
-                    yield val1
-                if isinstance(val1, tuple):
+                value = await value
+                if not isinstance(value, QueueEmpty):
+                    yield value
+                if isinstance(value, tuple):
                     await self._crawler.enqueue_many(
-                        (new_urls := val1[2]), ignore_visited=True
+                        (new_urls := value[2]), ignore_visited=True
                     )
             finally:
                 self._queue.task_done()
