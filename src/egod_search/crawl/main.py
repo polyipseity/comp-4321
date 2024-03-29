@@ -138,8 +138,8 @@ async def main(
                     await sleep(0)  # yield to crawlers
 
         pages_crawled = 0
-        database_lock = Lock()
         pages_crawled_lock = Lock()
+        database_lock = Lock()
 
         async def index(progress: Callable[[], object] = lambda: None):
             # multiple instances make the database insertion order nondeterministic
@@ -206,32 +206,27 @@ async def main(
                             Scheme.Page.WordOccurrenceType.PLAINTEXT
                         ].append(pos)
 
+                    nonlocal pages_crawled
+                    async with pages_crawled_lock:
+                        if pages_crawled < page_count:
+                            pages_crawled += 1
+                        else:
+                            return  # do not use `break`, otherwise `task_done` will be called too many times
                     async with database_lock:
-                        try:
-                            await database.index_page(
-                                Scheme.Page(
-                                    url=url,
-                                    mod_time=mod_time,
-                                    size=size,
-                                    text=content,
-                                    plaintext=plaintext,
-                                    title=title,
-                                    links=outbound_urls,
-                                    word_occurrences=word_occurrences,
-                                ),
-                            )
-
-                            commit = False
-                            nonlocal pages_crawled
-                            async with pages_crawled_lock:
-                                if pages_crawled < page_count:
-                                    pages_crawled += 1
-                                    commit = True
-                            if commit:
-                                await database.conn.commit()
-                                progress()
-                        finally:
-                            await database.conn.rollback()
+                        await database.index_page(
+                            Scheme.Page(
+                                url=url,
+                                mod_time=mod_time,
+                                size=size,
+                                text=content,
+                                plaintext=plaintext,
+                                title=title,
+                                links=outbound_urls,
+                                word_occurrences=word_occurrences,
+                            ),
+                        )
+                        await database.conn.commit()
+                        progress()
                 finally:
                     database_queue.task_done()
             database_queue.task_done()
