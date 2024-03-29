@@ -187,7 +187,7 @@ class Crawler:
                     charset = None
             content = content.decode(charset or "utf-8", errors="replace")
 
-            outbound_urls = list[URL]()
+            outlinks = list[URL]()
             for a_tag in BeautifulSoup(
                 content, "html.parser", parse_only=SoupStrainer("a")
             ):
@@ -198,9 +198,14 @@ class Crawler:
                     continue
                 if isinstance(hrefs, str):
                     hrefs = (hrefs,)
-                outbound_urls.extend(map(response.url.join, map(URL, hrefs)))
+                outlinks.extend(
+                    filter(
+                        lambda href: href.scheme in self.SUPPORTED_SCHEMES,
+                        map(response.url.join, map(URL, hrefs)),
+                    )
+                )
 
-            return response, content, outbound_urls
+            return response, content, outlinks
         except Exception as exc:
             raise self.CrawlError(url) from exc
 
