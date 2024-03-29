@@ -33,7 +33,8 @@ async def main(
     summary_count: int,
     keyword_count: int,
     link_count: int,
-    concurrency: int,
+    request_concurrency: int,
+    database_concurrency: int,
     show_progress: bool,
 ) -> None:
     """
@@ -48,8 +49,12 @@ async def main(
 
     if page_count < 0:
         raise ValueError(f"Page count must be nonnegative: {page_count}")
-    if concurrency <= 0:
-        raise ValueError(f"Concurrency must be positive: {concurrency}")
+    if request_concurrency <= 0:
+        raise ValueError(f"Request concurrency must be positive: {request_concurrency}")
+    if database_concurrency <= 0:
+        raise ValueError(
+            f"Database concurrency must be positive: {database_concurrency}"
+        )
 
     async with (
         Scheme(connect(database_path.__fspath__()), init=True) as database,
@@ -238,13 +243,11 @@ async def main(
             unit="pages",
         ) as progress:
             await crawler.enqueue_many(urls)
-
-            indexer_count = 2
             async with TaskGroup() as tg:
-                for _ in range(concurrency):
+                for _ in range(request_concurrency):
                     tg.create_task(crawl())
-                tg.create_task(crawl_to_index_bridge(indexer_count))
-                for _ in range(indexer_count):
+                tg.create_task(crawl_to_index_bridge(database_concurrency))
+                for _ in range(database_concurrency):
                     tg.create_task(index(progress.update))
 
     if summary_path is not None:
@@ -329,10 +332,16 @@ def parser(parent: Callable[..., ArgumentParser] | None = None) -> ArgumentParse
     )
     parser.add_argument(
         "-c",
-        "--concurrency",
+        "--request-concurrency",
+        type=int,
+        default=6,
+        help="maximum number of concurrent requests, the crawling order remains deterministic; default 6",
+    )
+    parser.add_argument(
+        "--database-concurrency",
         type=int,
         default=1,
-        help="maximum number of concurrent requests, a value of more than 1 makes the crawling order nondeterministic; default 1",
+        help="maximum number of concurrent database write, a value of more than 1 makes the database order nondeterministic; default 1",
     )
     parser.add_argument(
         "--no-progress",
@@ -351,7 +360,8 @@ def parser(parent: Callable[..., ArgumentParser] | None = None) -> ArgumentParse
             summary_count=args.summary_count,
             keyword_count=args.keyword_count,
             link_count=args.link_count,
-            concurrency=args.concurrency,
+            request_concurrency=args.request_concurrency,
+            database_concurrency=args.database_concurrency,
             show_progress=args.show_progress,
         )
 
