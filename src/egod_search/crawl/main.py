@@ -70,7 +70,7 @@ async def main(
             pages_crawled_lock = Lock()
             database_lock = Lock()
 
-            async def write(page: Scheme.Page | None) -> bool:
+            async def write(page: Scheme.Page | None) -> bool | None:
                 # multiple instances make the database insertion order nondeterministic
                 if page is None:
                     return False
@@ -79,7 +79,7 @@ async def main(
                     if pages_crawled < page_count:
                         pages_crawled += 1
                     else:
-                        return False
+                        return None
                 async with (
                     database_lock
                 ):  # SQLite does not support concurrency in practice... others may though.
@@ -141,6 +141,8 @@ async def main(
                     ):
                         if written:
                             progress.update()
+                        elif written is None:
+                            break
 
         if summary_path is not None:
             async with Scheme(connect(database_path.__fspath__())) as database:
