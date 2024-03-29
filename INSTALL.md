@@ -3,9 +3,9 @@
 **Step 1:**
 Set up a Python environment: Ensure that you have Python installed on your system. You can download the latest version of Python from the official Python website (https://www.python.org) and follow the installation instructions for your operating system.
 
-_Note: For Windows, you may want to install the Python launcher, enabling you to use `py` in place of `python` for consistently running the latest version of Python, avoiding any conflicts with third-party software and outdated Python versions. 
+_Note: For Windows, you may want to install the Python launcher, enabling you to use `py` in place of `python` for consistently running the latest version of Python, avoiding any conflicts with third-party software and outdated Python versions._
 
-**After doing so, replace all instances of `python` with `py` in the following commands.**_
+_**After doing so, replace all instances of `python` with `py` in the following commands.**_
 
 **Step 2:**
 Clone the repository: Open a terminal or command prompt and navigate to the directory where you want to clone the repository. Then, run the following command to clone the repository:
