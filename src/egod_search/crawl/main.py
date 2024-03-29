@@ -17,9 +17,9 @@ from yarl import URL
 from .. import VERSION
 from .._util import Value, parse_http_datetime
 from ..crawl import Crawler
+from ..database.output import summary_s
 from ..database.scheme import Scheme
 from ..index.transform import default_transform
-from .output import summary_s
 
 _PROGRAM = __package__ or __name__
 

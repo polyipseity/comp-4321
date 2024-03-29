@@ -6,7 +6,7 @@ from typing import Any
 from tqdm.auto import tqdm
 
 from .._util import SupportsWrite, a_fetch_value
-from ..database.scheme import Scheme
+from .scheme import Scheme
 
 
 async def summary(
