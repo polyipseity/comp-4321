@@ -21,7 +21,7 @@ from ..database.scheme import Scheme
 from ..index import UnindexedPage, index_page
 
 _PROGRAM = __package__ or __name__
-_QUEUE_MAX_SIZE = 65536
+_QUEUE_MAX_SIZE = 1024
 
 
 async def main(
@@ -105,13 +105,9 @@ async def main(
 
                     async def preprocess() -> AsyncIterator[UnindexedPage]:
                         async for response in responses:
-                            if isinstance(response, BaseException):
-                                if isinstance(response, Exception):
-                                    logger.exception(
-                                        "Failed to crawl", exc_info=response
-                                    )
-                                    continue
-                                raise RuntimeError("Failed to crawl") from response
+                            if isinstance(response, Exception):
+                                logger.exception("Failed to crawl", exc_info=response)
+                                continue
                             response, content, outlinks = response
                             try:
                                 response.raise_for_status()

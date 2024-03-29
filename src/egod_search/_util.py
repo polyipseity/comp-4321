@@ -123,7 +123,7 @@ async def a_eager_map(
 
     async with TaskGroup() as tg:
         tg.create_task(submit())
-        while not isinstance(item := await tg.create_task(queue.get()), _Sentinel):
+        while not isinstance(item := await queue.get(), _Sentinel):
             queue.task_done()
             yield await item
 
@@ -155,7 +155,7 @@ async def a_pool_imap(
 
     async with TaskGroup() as tg:
         tg.create_task(submit())
-        while not isinstance(item := await tg.create_task(queue.get()), _Sentinel):
+        while not isinstance(item := await queue.get(), _Sentinel):
             queue.task_done()
             yield await item
 

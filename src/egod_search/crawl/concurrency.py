@@ -1,6 +1,7 @@
 # -*- coding: UTF-8 -*-
 from asyncio import (
     Event,
+    InvalidStateError,
     Lock,
     Queue,
     QueueEmpty,
@@ -43,12 +44,12 @@ class ConcurrentCrawler:
         self._crawler = crawler
         self._dequeue_lock = Lock()
         self._init_concurrency = init_concurrency
-        self._queue = Queue[Awaitable[Crawler.Result | BaseException]](max_size)
+        self._queue = Queue[Awaitable[Crawler.Result | Exception]](max_size)
         self._running = True
         self._stopping = Semaphore(0)
         self._tasks = TaskGroup()
 
-    async def __aenter__(self) -> AsyncIterator[Crawler.Result | BaseException]:
+    async def __aenter__(self) -> AsyncIterator[Crawler.Result | Exception]:
         """
         Start the crawler.
         """
@@ -84,7 +85,7 @@ class ConcurrentCrawler:
                 async with self._dequeue_lock:
                     url = await self._crawler.dequeue()
                 future.set_result(await self._crawler.crawl(url))
-            except BaseException as exc:
+            except Exception as exc:
                 future.set_result(exc)
                 if isinstance(exc, QueueEmpty):
                     # no URLs to crawl
@@ -99,7 +100,7 @@ class ConcurrentCrawler:
         self._running = False
         self._awake.set()
 
-    async def pipe(self) -> AsyncIterator[Crawler.Result | BaseException]:
+    async def pipe(self) -> AsyncIterator[Crawler.Result | Exception]:
         """
         Pipe the output. Outbound links are added as output are piped from this iterator.
 
