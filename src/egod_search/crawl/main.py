@@ -1,20 +1,21 @@
 # -*- coding: UTF-8 -*-
-from asyncio import gather
+from asyncio import Event, Lock, Queue, QueueEmpty, Semaphore, TaskGroup, gather, sleep
 from collections import defaultdict
 from logging import INFO, basicConfig, getLogger
 from time import time
+from types import EllipsisType
+from aiohttp import ClientResponse, ClientResponseError
 from aiosqlite import connect
 from anyio import Path
 from argparse import ZERO_OR_MORE, ArgumentParser, Namespace
-from asyncstdlib import islice as aislice
 from bs4 import BeautifulSoup, Tag
 from functools import wraps
 from tqdm.auto import tqdm
-from typing import Callable, Collection, MutableMapping, MutableSequence
+from typing import Callable, Collection, MutableMapping, MutableSequence, Sequence
 from yarl import URL
 
 from .. import VERSION
-from .._util import parse_http_datetime
+from .._util import Value, parse_http_datetime
 from ..crawl import Crawler
 from ..database.scheme import Scheme
 from ..index.transform import default_transform
@@ -32,7 +33,8 @@ async def main(
     summary_count: int,
     keyword_count: int,
     link_count: int,
-    concurrency: int,
+    request_concurrency: int,
+    database_concurrency: int,
     show_progress: bool,
 ) -> None:
     """
@@ -47,36 +49,187 @@ async def main(
 
     if page_count < 0:
         raise ValueError(f"Page count must be nonnegative: {page_count}")
-    if concurrency <= 0:
-        raise ValueError(f"Concurrency must be positive: {concurrency}")
+    if request_concurrency <= 0:
+        raise ValueError(f"Request concurrency must be positive: {request_concurrency}")
+    if database_concurrency <= 0:
+        raise ValueError(
+            f"Database concurrency must be positive: {database_concurrency}"
+        )
 
     async with (
-        Scheme(connect(database_path.__fspath__())) as database,
+        Scheme(connect(database_path.__fspath__()), init=True) as database,
         Crawler() as crawler,
     ):
+        ValueType = tuple[ClientResponse, str | None, Sequence[URL]] | BaseException
+        crawl_queue = Queue[Value[tuple[Event, ValueType | None]]]()
+        database_queue = Queue[ValueType | EllipsisType]()
 
-        async def crawl_ok_responses():
-            await crawler.enqueue_many(urls)
+        crawling = True
+        crawl_dequeue_lock = Lock()
+        awake_crawl_event = Event()
+        stopping_crawl_semaphore = Semaphore(0)
+
+        async def crawl():
+            # always BFS, even if there are multiple instances
+            stopping_crawl_semaphore.release()
+            while crawling:
+                event = Event()
+                value = Value[tuple[Event, ValueType | None]]((event, None))
+                is_empty = False
+                await crawl_queue.put(value)
+                try:
+                    async with crawl_dequeue_lock:
+                        url = await crawler.dequeue()
+                    value.val = (event, await crawler.crawl(url))
+                except QueueEmpty as exc:
+                    # no URLs to crawl
+                    value.val = (event, exc)
+                    is_empty = True
+                except BaseException as exc:
+                    value.val = (event, exc)
+                finally:
+                    event.set()
+
+                if is_empty:
+                    async with stopping_crawl_semaphore:
+                        # wait for new URLs or stop
+                        await awake_crawl_event.wait()
+
+        async def crawl_to_index_pipe(consumer_count: int):
+            # only one instance allowed
+            while stopping_crawl_semaphore.locked():
+                await sleep(0)
             while True:
-                # crawl pages concurrently
-                responses = await gather(
-                    *(crawler.crawl() for _ in range(concurrency)),
-                    return_exceptions=True,
-                )
-                if all(isinstance(response, TypeError) for response in responses):
-                    break
-                for response in responses:
-                    if isinstance(response, BaseException):
-                        if isinstance(response, Exception):
-                            logger.exception("Failed to crawl", exc_info=response)
-                            continue
-                        raise RuntimeError() from response
-                    if not response[0].ok:
-                        logger.error(
-                            f"Failed to crawl '{response[0].url}': {response[0].status}"
-                        )
+                try:
+                    value = crawl_queue.get_nowait()
+                except QueueEmpty:
+                    nonlocal crawling
+                    if crawling:
+                        if stopping_crawl_semaphore.locked():
+                            # all crawlers are stopping
+                            crawling = False
+                            awake_crawl_event.set()
+                            awake_crawl_event.clear()
+                        await sleep(0)  # yield to crawlers
                         continue
-                    yield response
+                    else:
+                        await gather(
+                            *(database_queue.put(...) for _ in range(consumer_count))
+                        )  # fill the queue with `...`
+                        break
+                try:
+                    new_urls = None
+                    if value.val[1] is None:
+                        await value.val[0].wait()
+                        assert value.val[1] is not None
+                    if isinstance((val1 := value.val[1]), tuple):
+                        await crawler.enqueue_many(
+                            (new_urls := val1[2]), ignore_visited=True
+                        )
+                    if not isinstance(val1, QueueEmpty):
+                        await database_queue.put(val1)
+                finally:
+                    crawl_queue.task_done()
+
+                if new_urls:
+                    # new URLs available
+                    awake_crawl_event.set()
+                    awake_crawl_event.clear()
+                    await sleep(0)  # yield to crawlers
+
+        pages_crawled = 0
+        pages_crawled_lock = Lock()
+        database_lock = Lock()
+
+        async def index(progress: Callable[[], object] = lambda: None):
+            # multiple instances make the database insertion order nondeterministic
+            while (crawled := await database_queue.get()) is not ...:
+                try:
+                    if isinstance(crawled, BaseException):
+                        if isinstance(crawled, Exception):
+                            logger.exception("Failed to crawl", exc_info=crawled)
+                            continue
+                        raise RuntimeError("Failed to crawl") from crawled
+                    response, content, outbound_urls = crawled
+                    try:
+                        response.raise_for_status()
+                    except ClientResponseError:
+                        logger.exception("Failed to crawl")
+                        continue
+                    if content is None:
+                        continue
+
+                    url = response.url
+                    try:
+                        mod_time = int(
+                            parse_http_datetime(
+                                response.headers.get(
+                                    "Last-Modified",
+                                    response.headers.get("Date", ""),
+                                )
+                            ).timestamp()
+                        )
+                    except ValueError:
+                        mod_time = int(time())
+
+                    html = BeautifulSoup(content, "html.parser")
+                    title = (
+                        ""
+                        if html.title is None
+                        else str(html.title)[
+                            len("<title>") : -len("</title>")
+                        ]  # Google Chrome displays text inside the `title` tag verbatim, including HTML tags. So `<title>a<span>b</span></title>` displays as `a<span>b</span>` instead of `ab`.
+                    )
+                    for title_tag in html.find_all("title"):
+                        assert isinstance(title_tag, Tag)
+                        title_tag.extract()
+                    plaintext = html.get_text("\n")
+                    try:
+                        size = int(response.headers.get("Content-Length", ""))
+                    except ValueError:
+                        size = len(
+                            plaintext
+                        )  # number of characters in the plaintext, project requirement
+
+                    word_occurrences = defaultdict[
+                        str,
+                        MutableMapping[
+                            Scheme.Page.WordOccurrenceType, MutableSequence[int]
+                        ],
+                    ](lambda: defaultdict(list))
+                    for pos, word in default_transform(title):
+                        word_occurrences[word][
+                            Scheme.Page.WordOccurrenceType.TITLE
+                        ].append(pos)
+                    for pos, word in default_transform(plaintext):
+                        word_occurrences[word][
+                            Scheme.Page.WordOccurrenceType.PLAINTEXT
+                        ].append(pos)
+
+                    nonlocal pages_crawled
+                    async with pages_crawled_lock:
+                        if pages_crawled < page_count:
+                            pages_crawled += 1
+                        else:
+                            return  # do not use `break`, otherwise `task_done` will be called too many times
+                    async with database_lock:
+                        await database.index_page(
+                            Scheme.Page(
+                                url=url,
+                                mod_time=mod_time,
+                                size=size,
+                                text=content,
+                                plaintext=plaintext,
+                                title=title,
+                                links=outbound_urls,
+                                word_occurrences=word_occurrences,
+                            ),
+                        )
+                        await database.conn.commit()
+                        progress()
+                finally:
+                    database_queue.task_done()
+            database_queue.task_done()
 
         with tqdm(
             total=page_count,
@@ -84,75 +237,23 @@ async def main(
             desc="crawling",
             unit="pages",
         ) as progress:
-            async for response, content, outbound_urls in aislice(
-                crawl_ok_responses(), page_count
-            ):
-                if content is None:
-                    continue
-
-                url = response.url
+            await crawler.enqueue_many(urls)
+            async with TaskGroup() as tg:
                 try:
-                    mod_time = int(
-                        parse_http_datetime(
-                            response.headers.get(
-                                "Last-Modified", response.headers.get("Date", "")
-                            )
-                        ).timestamp()
+                    for _ in range(request_concurrency):
+                        tg.create_task(crawl())
+                    tg.create_task(crawl_to_index_pipe(database_concurrency))
+                    await gather(
+                        *(
+                            tg.create_task(index(progress.update))
+                            for _ in range(database_concurrency)
+                        )
                     )
-                except ValueError:
-                    mod_time = int(time())
+                finally:
+                    crawling = False  # required to stop the crawling
 
-                html = BeautifulSoup(content, "html.parser")
-                title = (
-                    ""
-                    if html.title is None
-                    else str(html.title)[
-                        len("<title>") : -len("</title>")
-                    ]  # Google Chrome displays text inside the `title` tag verbatim, including HTML tags. So `<title>a<span>b</span></title>` displays as `a<span>b</span>` instead of `ab`.
-                )
-                for title_tag in html.find_all("title"):
-                    assert isinstance(title_tag, Tag)
-                    title_tag.extract()
-                plaintext = html.get_text("\n")
-                try:
-                    size = int(response.headers.get("Content-Length", ""))
-                except ValueError:
-                    size = len(
-                        plaintext
-                    )  # number of characters in the plaintext, project requirement
-
-                word_occurrences = defaultdict[
-                    str,
-                    MutableMapping[
-                        Scheme.Page.WordOccurrenceType, MutableSequence[int]
-                    ],
-                ](lambda: defaultdict(list))
-                for pos, word in default_transform(title):
-                    word_occurrences[word][Scheme.Page.WordOccurrenceType.TITLE].append(
-                        pos
-                    )
-                for pos, word in default_transform(plaintext):
-                    word_occurrences[word][
-                        Scheme.Page.WordOccurrenceType.PLAINTEXT
-                    ].append(pos)
-
-                await database.index_page(
-                    Scheme.Page(
-                        url=url,
-                        mod_time=mod_time,
-                        size=size,
-                        text=content,
-                        plaintext=plaintext,
-                        title=title,
-                        links=outbound_urls,
-                        word_occurrences=word_occurrences,
-                    ),
-                )
-
-                await database.conn.commit()
-                progress.update()
-
-        if summary_path is not None:
+    if summary_path is not None:
+        async with Scheme(connect(database_path.__fspath__())) as database:
             await summary_path.write_text(
                 await summary_s(
                     database,
@@ -233,10 +334,16 @@ def parser(parent: Callable[..., ArgumentParser] | None = None) -> ArgumentParse
     )
     parser.add_argument(
         "-c",
-        "--concurrency",
+        "--request-concurrency",
+        type=int,
+        default=6,
+        help="maximum number of concurrent requests, the crawling order remains deterministic; default 6",
+    )
+    parser.add_argument(
+        "--database-concurrency",
         type=int,
         default=1,
-        help="maximum number of concurrent requests, a value of more than 1 makes the crawling order nondeterministic; default 1",
+        help="maximum number of concurrent database write, a value of more than 1 makes the database order nondeterministic; default 1",
     )
     parser.add_argument(
         "--no-progress",
@@ -255,7 +362,8 @@ def parser(parent: Callable[..., ArgumentParser] | None = None) -> ArgumentParse
             summary_count=args.summary_count,
             keyword_count=args.keyword_count,
             link_count=args.link_count,
-            concurrency=args.concurrency,
+            request_concurrency=args.request_concurrency,
+            database_concurrency=args.database_concurrency,
             show_progress=args.show_progress,
         )
 

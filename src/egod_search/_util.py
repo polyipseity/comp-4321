@@ -1,11 +1,13 @@
 # -*- coding: UTF-8 -*-
+from dataclasses import dataclass
 from datetime import datetime
 from email.message import Message
 from aiosqlite import Connection
-from typing import Any, Mapping, Protocol, TypeVar
+from typing import Any, Generic, Mapping, Protocol, TypeVar
 
 _AnyStr_co = TypeVar("_AnyStr_co", str, bytes, covariant=True)
 _AnyStr_contra = TypeVar("_AnyStr_contra", str, bytes, contravariant=True)
+_T = TypeVar("_T")
 
 _HTTP_LAST_MODIFIED = {
     "Jan": "01",
@@ -49,6 +51,18 @@ class SupportsWrite(Protocol[_AnyStr_contra]):
         Write a string.
         """
         ...
+
+
+@dataclass(slots=True)
+class Value(Generic[_T]):
+    """
+    A value container.
+    """
+
+    val: _T
+    """
+    The contained value.
+    """
 
 
 async def a_fetch_one(conn: Connection, *args: Any) -> Any:

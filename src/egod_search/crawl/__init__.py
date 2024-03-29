@@ -1,6 +1,6 @@
 # -*- coding: UTF-8 -*-
 from aiohttp import ClientResponse, ClientSession
-from asyncio import Lock
+from asyncio import Lock, QueueEmpty
 from bs4 import BeautifulSoup, SoupStrainer, Tag
 from sys import modules
 from types import EllipsisType, TracebackType
@@ -87,7 +87,7 @@ class Crawler:
         """
         await self._session.close()
 
-    async def enqueue(self, url: URL) -> None:
+    async def enqueue(self, url: URL, *, ignore_visited: bool = False) -> None:
         """
         Enqueue a URL to be crawled.
 
@@ -97,10 +97,14 @@ class Crawler:
             raise ValueError(f"URL with invalid scheme: {url}")
         async with self._lock:
             if url in self._visited:
+                if ignore_visited:
+                    return
                 raise self.URLAlreadyVisited(url)
             self._queue[url] = ...
 
-    async def enqueue_many(self, urls: Collection[URL]) -> None:
+    async def enqueue_many(
+        self, urls: Collection[URL], *, ignore_visited: bool = False
+    ) -> None:
         """
         Enqueue multiple URLs to be crawled. See `enqueue`.
         """
@@ -110,25 +114,33 @@ class Crawler:
             raise ValueError(f"URL(s) with invalid scheme: {unsupported}")
         async with self._lock:
             if visited := self._visited & frozenset(urls):
-                raise self.URLAlreadyVisited(*visited)
-            self._queue.update((url, ...) for url in urls)
+                if not ignore_visited:
+                    raise self.URLAlreadyVisited(*visited)
+            self._queue.update((url, ...) for url in urls if url not in visited)
 
-    async def crawl(self) -> tuple[ClientResponse, str | None, Collection[URL]]:
+    async def dequeue(self) -> URL:
         """
-        Crawl a queued URL, enqueue the discovered URLs, and return the response, content and discovered URLs.
+        Dequeue a queued URL for crawling and mark it as visited.
 
-        Raises `TypeError` if there are no queued URLs. Raises `CrawlError` if we failed to crawl.
+        Raises `QueueEmpty` if there are no queued URLs.
         """
         async with self._lock:
             try:
-                href_url = next(iter(self._queue))
+                url = next(iter(self._queue))
             except StopIteration:
-                raise TypeError("No queued URLs")
-            self._visited.add(href_url)
-            del self._queue[href_url]
+                raise QueueEmpty("No queued URLs")
+            self._visited.add(url)
+            del self._queue[url]
+        return url
 
+    async def crawl(self, url: URL) -> tuple[ClientResponse, str | None, Sequence[URL]]:
+        """
+        Crawl the provided URL, enqueue the discovered URLs, and return the response, content and discovered URLs.
+
+        Raises `CrawlError` if an exception occurs.
+        """
         try:
-            async with self._session.get(href_url) as response:
+            async with self._session.get(url) as response:
                 content = await response.read()
             if (
                 not response.ok
@@ -182,26 +194,11 @@ class Crawler:
                     continue
                 if isinstance(hrefs, str):
                     hrefs = (hrefs,)
-                for href in hrefs:
-                    href_url = URL(href)
-                    if href_url.is_absolute():
-                        outbound_urls.append(href_url)
-                    else:
-                        outbound_urls.append(response.url.join(href_url))
-
-            async with self._lock:
-                self._visited |= frozenset(
-                    redirect.url for redirect in response.history
-                )
-                self._queue.update(
-                    (outbound_url, ...)
-                    for outbound_url in outbound_urls
-                    if outbound_url not in self._visited
-                )
+                outbound_urls.extend(map(response.url.join, map(URL, hrefs)))
 
             return response, content, outbound_urls
         except Exception as exc:
-            raise self.CrawlError(href_url) from exc
+            raise self.CrawlError(url) from exc
 
     @property
     def queue(self) -> Sequence[URL]:
