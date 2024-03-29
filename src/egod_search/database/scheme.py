@@ -7,7 +7,7 @@ from importlib.resources import files
 from itertools import chain
 from json import dumps
 from types import TracebackType
-from typing import Any, Collection, Mapping, NewType, Self, Sequence, Type
+from typing import Collection, Mapping, NewType, Self, Sequence, Type
 from yarl import URL
 
 from .. import PACKAGE_NAME
@@ -154,7 +154,7 @@ ORDER BY CASE content {' '.join(('WHEN ? THEN ?',) * len(vals))} END""",
             )
         )
 
-    async def url_id(self, content: URL, /, *args: Any, **kwargs: Any) -> URLID:
+    async def url_id(self, content: URL, /, *args: object, **kwargs: object) -> URLID:
         """
         Same as `url_ids` but for one item. Same options are supported.
         """
@@ -180,7 +180,7 @@ ORDER BY CASE content {' '.join(('WHEN ? THEN ?',) * len(vals))} END""",
             )
         )
 
-    async def word_id(self, content: str, /, *args: Any, **kwargs: Any) -> WordID:
+    async def word_id(self, content: str, /, *args: object, **kwargs: object) -> WordID:
         """
         Same as `word_ids` but for one item. Same options are supported.
         """

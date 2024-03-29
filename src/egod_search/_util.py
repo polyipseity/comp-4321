@@ -4,10 +4,10 @@ from dataclasses import dataclass
 from datetime import datetime
 from email.message import Message
 from multiprocessing.pool import Pool
+from sqlite3 import Row
 from aiosqlite import Connection
 from asyncstdlib import batched as abatched
 from typing import (
-    Any,
     AsyncIterable,
     AsyncIterator,
     Awaitable,
@@ -86,14 +86,16 @@ class Value(Generic[_T]):
     """
 
 
-async def a_fetch_one(conn: Connection, *args: Any) -> Any:
+async def a_fetch_one(conn: Connection, *args: object) -> Row | None:
     """
     Return the first row of query result if exists or `None`.
     """
     return await (await conn.execute(*args)).fetchone()
 
 
-async def a_fetch_value(conn: Connection, *args: Any, default: Any = None) -> Any:
+async def a_fetch_value(
+    conn: Connection, *args: object, default: object = None
+) -> object:
     """
     Return the first value of first row of query result if exists or `None`.
     """

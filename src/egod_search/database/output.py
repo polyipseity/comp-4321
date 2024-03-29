@@ -2,7 +2,6 @@
 from datetime import datetime, timezone
 from io import StringIO
 from json import loads
-from typing import Any
 from tqdm.auto import tqdm
 
 from .._util import SupportsWrite, a_fetch_value
@@ -26,11 +25,12 @@ async def summary(
     `link_count` is the maximum number of links, ordered alphabetically, per result. Negative values means all links.
     `show_progress` is whether to show a progress bar.
     """
-    total: int | None = await a_fetch_value(
+    total = await a_fetch_value(
         self.conn,
         """
 SELECT count(*) FROM main.pages""",
     )
+    assert isinstance(total, int | None)
     total = count if total is None else total if count < 0 else min(count, total)
     separator = ""
     with tqdm(
@@ -131,7 +131,7 @@ LIMIT ?""",
                 progress.update()
 
 
-async def summary_s(self: Scheme, *args: Any, **kwargs: Any) -> str:
+async def summary_s(self: Scheme, *args: object, **kwargs: object) -> str:
     """
     Same as `summary`, except that it returns a string. Same options are supported.
     """

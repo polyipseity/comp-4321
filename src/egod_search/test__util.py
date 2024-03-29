@@ -247,7 +247,7 @@ class SQLiteTestCase(IsolatedAsyncioTestCase):
 SELECT TrackId, Name, Composer FROM main.Track
 ORDER BY TrackId DESC
 LIMIT 50""",
-            ),
+            ),  # type: ignore
         )
         self.assertEqual(
             None,

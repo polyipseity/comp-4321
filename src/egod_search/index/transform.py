@@ -3,7 +3,7 @@ from functools import cache, wraps
 from importlib.resources import files
 from itertools import islice, pairwise, tee
 from re import DOTALL, compile
-from typing import Any, Iterable, Iterator, Sequence
+from typing import Iterable, Iterator, Sequence
 from unicodedata import normalize
 
 from .. import PACKAGE_NAME
@@ -299,11 +299,13 @@ def remove_stop_words_iter(
         yield position, word
 
 
-def split_words(*args: Any, **kwargs: Any) -> Sequence[tuple[int, str]]:
+def split_words(
+    text: str, *args: object, **kwargs: object
+) -> Sequence[tuple[int, str]]:
     """
     Split text into a sequence of positions and words. See `split_words_iter`.
     """
-    return tuple(split_words_iter(*args, **kwargs))
+    return tuple(split_words_iter(text, *args, **kwargs))
 
 
 def split_words_iter(text: str) -> Iterator[tuple[int, str]]:
