@@ -216,4 +216,5 @@ class Crawler:
 
 
 if "unittest" in modules:
+    from .test_concurrency import *
     from .test_main import *
