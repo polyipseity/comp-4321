@@ -1,13 +1,27 @@
 # -*- coding: UTF-8 -*-
+from asyncio import Queue, gather, get_running_loop
 from dataclasses import dataclass
 from datetime import datetime
 from email.message import Message
+from multiprocessing.pool import Pool
 from aiosqlite import Connection
-from typing import Any, Generic, Mapping, Protocol, TypeVar
+from asyncstdlib import batched as abatched
+from typing import (
+    Any,
+    AsyncIterable,
+    AsyncIterator,
+    Awaitable,
+    Callable,
+    Generic,
+    Mapping,
+    Protocol,
+    TypeVar,
+)
 
 _AnyStr_co = TypeVar("_AnyStr_co", str, bytes, covariant=True)
 _AnyStr_contra = TypeVar("_AnyStr_contra", str, bytes, contravariant=True)
 _T = TypeVar("_T")
+_U = TypeVar("_U")
 
 _HTTP_LAST_MODIFIED = {
     "Jan": "01",
@@ -23,6 +37,13 @@ _HTTP_LAST_MODIFIED = {
     "Nov": "11",
     "Dec": "12",
 }
+
+
+class _Sentinel:
+    __slots__ = ()
+
+
+_SENTINEL = _Sentinel()
 
 
 class SupportsRead(Protocol[_AnyStr_co]):
@@ -78,6 +99,62 @@ async def a_fetch_value(conn: Connection, *args: Any, default: Any = None) -> An
     """
     ret = await a_fetch_one(conn, *args)
     return default if ret is None else ret[0]
+
+
+async def a_eager_map(
+    func: Callable[[_T], Awaitable[_U]],
+    iterable: AsyncIterable[_T],
+    *,
+    concurrency: int = 1,
+    max_size: int = 0,
+) -> AsyncIterator[_U]:
+    """
+    Async map that eagerly evaluates.
+    """
+    loop = get_running_loop()
+    queue = Queue[_U | _Sentinel](max_size)
+
+    async def submit():
+        async for items in abatched(iterable, concurrency):
+            for item in await gather(*map(func, items)):
+                await queue.put(item)
+        await queue.put(_SENTINEL)
+
+    loop.create_task(submit())
+    while not isinstance(item := await queue.get(), _Sentinel):
+        queue.task_done()
+        yield item
+
+
+async def a_pool_imap(
+    pool: Pool,
+    func: Callable[[_T], _U],
+    iterable: AsyncIterable[_T],
+    *,
+    max_size: int = 0,
+) -> AsyncIterator[_U]:
+    """
+    `Pool.imap` for async.
+    """
+    loop = get_running_loop()
+    queue = Queue[Awaitable[_U] | _Sentinel](max_size)
+
+    async def submit():
+        async for item in iterable:
+            fut = loop.create_future()
+            await queue.put(fut)
+            pool.apply_async(
+                func,
+                (item,),
+                callback=fut.set_result,
+                error_callback=fut.set_exception,
+            )
+        await queue.put(_SENTINEL)
+
+    loop.create_task(submit())
+    while not isinstance(item := await queue.get(), _Sentinel):
+        queue.task_done()
+        yield await item
 
 
 def parse_content_type(val: str) -> tuple[str, Mapping[str, str]] | None:

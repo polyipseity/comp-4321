@@ -1,6 +1,7 @@
 # -*- coding: UTF-8 -*-
 from collections import defaultdict
 from dataclasses import dataclass
+from functools import partial
 from time import time
 from typing import Collection, Mapping, MutableMapping, MutableSequence
 from sys import modules
@@ -13,7 +14,7 @@ from ..database.scheme import Scheme
 
 
 @dataclass(frozen=True, kw_only=True, slots=True)
-class PageMetadata:
+class UnindexedPage:
     """
     Page metadata for indexing.
     """
@@ -21,6 +22,10 @@ class PageMetadata:
     url: URL
     """
     URL of the page.
+    """
+    content: str
+    """
+    Raw content of the page.
     """
     headers: Mapping[str, str]
     """
@@ -32,24 +37,24 @@ class PageMetadata:
     """
 
 
-def index_page(metadata: PageMetadata, content: str):
+def index_page(page: UnindexedPage):
     """
     Index a page from its metadata, content, and links.
     """
-    url = metadata.url
+    url = page.url
     try:
         mod_time = int(
             parse_http_datetime(
-                metadata.headers.get(
+                page.headers.get(
                     "Last-Modified",
-                    metadata.headers.get("Date", ""),
+                    page.headers.get("Date", ""),
                 )
             ).timestamp()
         )
     except ValueError:
         mod_time = int(time())
 
-    html = BeautifulSoup(content, "html.parser")
+    html = BeautifulSoup(page.content, "html.parser")
     title = (
         ""
         if html.title is None
@@ -62,7 +67,7 @@ def index_page(metadata: PageMetadata, content: str):
         title_tag.extract()
     plaintext = html.get_text("\n")
     try:
-        size = int(metadata.headers.get("Content-Length", ""))
+        size = int(page.headers.get("Content-Length", ""))
     except ValueError:
         size = len(
             plaintext
@@ -71,7 +76,7 @@ def index_page(metadata: PageMetadata, content: str):
     word_occurrences = defaultdict[
         str,
         MutableMapping[Scheme.Page.WordOccurrenceType, MutableSequence[int]],
-    ](lambda: defaultdict(list))
+    ](partial(defaultdict, list))
     for pos, word in default_transform(title):
         word_occurrences[word][Scheme.Page.WordOccurrenceType.TITLE].append(pos)
     for pos, word in default_transform(plaintext):
@@ -81,10 +86,10 @@ def index_page(metadata: PageMetadata, content: str):
         url=url,
         mod_time=mod_time,
         size=size,
-        text=content,
+        text=page.content,
         plaintext=plaintext,
         title=title,
-        links=metadata.links,
+        links=page.links,
         word_occurrences=word_occurrences,
     )
 

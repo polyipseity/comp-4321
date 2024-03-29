@@ -28,7 +28,9 @@ class ConcurrentCrawler:
         "_tasks",
     )
 
-    def __init__(self, crawler: Crawler, *, init_concurrency: int = 0) -> None:
+    def __init__(
+        self, crawler: Crawler, *, max_size: int = 0, init_concurrency: int = 0
+    ) -> None:
         """
         Initialize `ConcurrentCrawler`.
         """
@@ -36,7 +38,7 @@ class ConcurrentCrawler:
         self._crawler = crawler
         self._dequeue_lock = Lock()
         self._init_concurrency = init_concurrency
-        self._queue = Queue[Value[tuple[Event, self._ValueType | None]]]()
+        self._queue = Queue[Value[tuple[Event, self._ValueType | None]]](max_size)
         self._running = True
         self._stopping = Semaphore(0)
         self._tasks = TaskGroup()

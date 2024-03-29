@@ -1,23 +1,26 @@
 # -*- coding: UTF-8 -*-
-from asyncio import Lock, gather
+from asyncio import Lock
 from logging import INFO, basicConfig, getLogger
-from aiohttp import ClientResponse, ClientResponseError
+from multiprocessing.pool import Pool
+from aiohttp import ClientResponseError
 from aiosqlite import connect
 from anyio import Path
 from argparse import ZERO_OR_MORE, ArgumentParser, Namespace
 from functools import wraps
 from tqdm.auto import tqdm
-from typing import AsyncIterator, Callable, Collection, Sequence
+from typing import AsyncIterator, Callable, Collection
 from yarl import URL
 
 from .. import VERSION
+from .._util import a_eager_map, a_pool_imap
 from ..crawl import Crawler
 from ..crawl.concurrency import ConcurrentCrawler
 from ..database.output import summary_s
 from ..database.scheme import Scheme
-from ..index import PageMetadata, index_page
+from ..index import UnindexedPage, index_page
 
 _PROGRAM = __package__ or __name__
+_QUEUE_MAX_SIZE = 65536
 
 
 async def main(
@@ -30,6 +33,7 @@ async def main(
     keyword_count: int,
     link_count: int,
     request_concurrency: int,
+    index_concurrency: int,
     database_concurrency: int,
     show_progress: bool,
 ) -> None:
@@ -47,6 +51,8 @@ async def main(
         raise ValueError(f"Page count must be nonnegative: {page_count}")
     if request_concurrency <= 0:
         raise ValueError(f"Request concurrency must be positive: {request_concurrency}")
+    if index_concurrency <= 0:
+        raise ValueError(f"Index concurrency must be positive: {index_concurrency}")
     if database_concurrency <= 0:
         raise ValueError(
             f"Database concurrency must be positive: {database_concurrency}"
@@ -60,66 +66,70 @@ async def main(
         pages_crawled_lock = Lock()
         database_lock = Lock()
 
-        async def index(
-            iterator: AsyncIterator[
-                tuple[ClientResponse, str | None, Sequence[URL]] | BaseException
-            ],
-            progress: Callable[[], object] = lambda: None,
-        ):
+        async def write(page: Scheme.Page | None) -> bool:
             # multiple instances make the database insertion order nondeterministic
-            async for crawled in iterator:
-                if isinstance(crawled, BaseException):
-                    if isinstance(crawled, Exception):
-                        logger.exception("Failed to crawl", exc_info=crawled)
-                        continue
-                    raise RuntimeError("Failed to crawl") from crawled
-                response, content, outbound_urls = crawled
-                try:
-                    response.raise_for_status()
-                except ClientResponseError:
-                    logger.exception("Failed to crawl")
-                    continue
-                if content is None:
-                    continue
+            if page is None:
+                return False
+            nonlocal pages_crawled
+            async with pages_crawled_lock:
+                if pages_crawled < page_count:
+                    pages_crawled += 1
+                else:
+                    return False
+            async with (
+                database_lock
+            ):  # SQLite does not support concurrency in practice... others may though.
+                await database.index_page(page)
+                await database.conn.commit()
+            return True
 
-                page = index_page(
-                    PageMetadata(
-                        url=response.url,
-                        headers=response.headers,
-                        links=outbound_urls,
-                    ),
-                    content,
-                )
-
-                nonlocal pages_crawled
-                async with pages_crawled_lock:
-                    if pages_crawled < page_count:
-                        pages_crawled += 1
-                    else:
-                        break
-                async with (
-                    database_lock
-                ):  # SQLite does not support concurrency in practice... others may though.
-                    await database.index_page(page)
-                    await database.conn.commit()
-                    progress()
-
-        with tqdm(
-            total=page_count,
-            disable=not show_progress,
-            desc="crawling",
-            unit="pages",
-        ) as progress:
+        with (
+            Pool(processes=index_concurrency) as index_pool,
+            tqdm(
+                total=page_count,
+                disable=not show_progress,
+                desc="crawling",
+                unit="pages",
+            ) as progress,
+        ):
             await crawler.enqueue_many(urls)
             async with ConcurrentCrawler(
-                crawler, init_concurrency=request_concurrency
+                crawler, max_size=_QUEUE_MAX_SIZE, init_concurrency=request_concurrency
             ) as responses:
-                await gather(
-                    *(
-                        index(responses, progress.update)
-                        for _ in range(database_concurrency)
-                    )
-                )
+
+                async def preprocess() -> AsyncIterator[UnindexedPage]:
+                    async for response in responses:
+                        if isinstance(response, BaseException):
+                            if isinstance(response, Exception):
+                                logger.exception("Failed to crawl", exc_info=response)
+                                continue
+                            raise RuntimeError("Failed to crawl") from response
+                        response, content, outlinks = response
+                        try:
+                            response.raise_for_status()
+                        except ClientResponseError:
+                            logger.exception("Failed to crawl")
+                            continue
+                        if content is None:
+                            continue
+                        # make the object pickle-able
+                        yield UnindexedPage(
+                            url=response.url,
+                            content=content,
+                            headers=dict(response.headers),
+                            links=outlinks,
+                        )
+
+                async for written in a_eager_map(
+                    write,
+                    a_pool_imap(
+                        index_pool, index_page, preprocess(), max_size=_QUEUE_MAX_SIZE
+                    ),
+                    concurrency=database_concurrency,
+                    max_size=_QUEUE_MAX_SIZE,
+                ):
+                    if written:
+                        progress.update()
 
     if summary_path is not None:
         async with Scheme(connect(database_path.__fspath__())) as database:
@@ -209,6 +219,12 @@ def parser(parent: Callable[..., ArgumentParser] | None = None) -> ArgumentParse
         help="maximum number of concurrent requests, the crawling order remains deterministic; default 6",
     )
     parser.add_argument(
+        "--index-concurrency",
+        type=int,
+        default=4,
+        help="maximum number of concurrent indexing, the indexing order remains deterministic; default 4",
+    )
+    parser.add_argument(
         "--database-concurrency",
         type=int,
         default=1,
@@ -232,6 +248,7 @@ def parser(parent: Callable[..., ArgumentParser] | None = None) -> ArgumentParse
             keyword_count=args.keyword_count,
             link_count=args.link_count,
             request_concurrency=args.request_concurrency,
+            index_concurrency=args.index_concurrency,
             database_concurrency=args.database_concurrency,
             show_progress=args.show_progress,
         )
