@@ -146,15 +146,15 @@ async def a_pool_imap(
             yield await item
 
 
-def parse_content_type(val: str) -> tuple[str, Mapping[str, str]] | None:
+def parse_content_type(val: str) -> tuple[str, Mapping[str, str]]:
     """
     Parse content type into a dictionary.
     """
     # https://stackoverflow.com/a/75727619
     msg = Message()
     msg["content-type"] = val
-    params = msg.get_params()
-    return None if params is None else (params[0][0], dict(params[1:]))
+    params = msg.get_params([("", "")])
+    return params[0][0], dict(params[1:])
 
 
 def parse_http_datetime(val: str) -> datetime:

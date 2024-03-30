@@ -179,9 +179,12 @@ class Crawler:
                         and (charset := meta_tag.get("content"))
                         and (isinstance(charset, str) or (charset := charset[0]))
                         and (
-                            charset := parse_content_type(str(charset))
-                        )  # `charset` might actually be `ContentMetaAttributeValue` instead
-                        and (charset := charset[1].get("charset"))
+                            charset := parse_content_type(
+                                str(
+                                    charset  # `charset` might be `ContentMetaAttributeValue`, so need to `str` it
+                                )
+                            )[1].get("charset")
+                        )
                     ):
                         break
                     charset = None
