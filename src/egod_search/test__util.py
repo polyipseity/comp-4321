@@ -1,15 +1,330 @@
 # -*- coding: UTF-8 -*-
+from asyncio import (
+    Queue,
+    QueueEmpty,
+    gather,
+    get_event_loop,
+    new_event_loop,
+    set_event_loop,
+    sleep,
+    wait_for,
+)
+from atexit import register
+from contextlib import aclosing, closing
+from functools import partial
+from multiprocessing import Value
+from multiprocessing.pool import Pool
+from multiprocessing.sharedctypes import Synchronized
+from types import EllipsisType
+from typing import (
+    TYPE_CHECKING,
+    AsyncGenerator,
+    Awaitable,
+    Callable,
+    Generator,
+    Generic,
+    TypeVar,
+)
+from asyncstdlib import any_iter
+from operator import call
 from aiosqlite import connect
 from datetime import datetime, timezone
 from importlib.resources import files
 from unittest import IsolatedAsyncioTestCase, TestCase, main
 
 from . import PACKAGE_NAME
-from ._util import a_fetch_one, a_fetch_value, parse_http_datetime
+from ._util import (
+    a_eager_map,
+    a_fetch_one,
+    a_fetch_value,
+    a_iter_queue,
+    a_pool_imap,
+    iter_queue,
+    parse_content_type,
+    parse_http_datetime,
+)
+
+_T = TypeVar("_T")
+if TYPE_CHECKING:
+    _Synchronized = Synchronized
+else:
+
+    class _Synchronized(Generic[_T], Synchronized):
+        __slots__ = ()
 
 
-class HTTPTestCase(TestCase):
+_concurrency_shared = None
+
+
+def _concurrency_pool_init(shared: _Synchronized[int] | None = None) -> None:
+    global _concurrency_shared
+    _concurrency_shared = shared
+    loop = new_event_loop()
+    register(loop.close)
+    set_event_loop(loop)
+    register(partial(set_event_loop, None))
+
+
+def _concurrency_pool_run(func: Callable[[], Awaitable[_T]]) -> _T:
+    return get_event_loop().run_until_complete(func())
+
+
+async def _concurrency_task() -> None:
+    await sleep(ConcurrencyTestCase.TASK_TIME)
+
+
+async def _concurrency_fail() -> None:
+    await sleep(ConcurrencyTestCase.TASK_TIME)
+    raise RuntimeError()
+
+
+async def _concurrency_append(
+    shared: _Synchronized[int] | None = None,
+    sleep_multiplier: float = 1,
+) -> tuple[int, int]:
+    if (shared := shared or _concurrency_shared) is None:
+        raise ValueError()
+    with shared:
+        before = shared.value
+        shared.value += 1
+        after = shared.value
+    await sleep(ConcurrencyTestCase.TASK_TIME * sleep_multiplier)
+    return before, after
+
+
+async def _concurrency_sleep_and_append(
+    shared: _Synchronized[int] | None = None,
+    sleep_multiplier: float = 1,
+) -> tuple[int, int]:
+    if (shared := shared or _concurrency_shared) is None:
+        raise ValueError()
+    await sleep(ConcurrencyTestCase.TASK_TIME * sleep_multiplier)
+    with shared:
+        before = shared.value
+        shared.value += 1
+        after = shared.value
+    return before, after
+
+
+class ConcurrencyTestCase(IsolatedAsyncioTestCase):
+    TASK_TIME = 0.01
+
+    _MP_POOL_SLEEP_MULTIPLIER = 16
+    _QUEUE_PRODUCER_COUNT = 1024
     __slots__ = ()
+
+    async def test_a_iter_queue(self) -> None:
+        queue: Queue[None | EllipsisType]
+
+        async def producer():
+            count = 0
+            while count < self._QUEUE_PRODUCER_COUNT:
+                count += 1
+                await queue.put(None)
+            await queue.put(...)
+
+        async def consumer():
+            gen = a_iter_queue(queue)
+            assert isinstance(gen, AsyncGenerator)
+            gen2: AsyncGenerator[None | EllipsisType, None] = gen
+            async with aclosing(
+                gen2
+            ) as gen2:  # unfortunately, `aclose` is not called instantly after `for`
+                async for _ in gen2:
+                    if _ is ...:
+                        break
+            with self.assertRaises(QueueEmpty):
+                queue.get_nowait()
+            await wait_for(queue.join(), self.TASK_TIME)
+
+        async def consumer_no_break():
+            async for _ in a_iter_queue(queue):
+                pass
+
+        queue = Queue()
+        await gather(producer(), consumer())
+        queue = Queue()
+        with self.assertRaises(TimeoutError):
+            await gather(producer(), wait_for(consumer_no_break(), self.TASK_TIME))
+
+    async def test_iter_queue(self) -> None:
+        queue: Queue[None | EllipsisType]
+
+        async def producer():
+            count = 0
+            while count < self._QUEUE_PRODUCER_COUNT:
+                count += 1
+                await queue.put(None)
+            await queue.put(...)
+
+        async def consumer():
+            gen = iter_queue(queue)
+            assert isinstance(gen, Generator)
+            gen2: Generator[None | EllipsisType, None, None] = gen
+            with closing(
+                gen2
+            ) as gen2:  # unfortunately, `close` is not called instantly after `for`
+                for _ in gen2:
+                    if _ is ...:
+                        break
+            with self.assertRaises(QueueEmpty):
+                queue.get_nowait()
+            await wait_for(queue.join(), self.TASK_TIME)
+
+        async def consumer_no_break():
+            for _ in iter_queue(queue):
+                pass
+
+        queue = Queue()
+        await producer()
+        await consumer()
+        queue = Queue()
+        await producer()
+        await wait_for(consumer_no_break(), self.TASK_TIME)
+
+    async def test_a_eager_map1(self) -> None:
+        shared = Value("q", 0)
+        expected = iter(((0, 1), (1, 2)))
+        async for output in a_eager_map(
+            call,
+            any_iter(
+                (
+                    partial(_concurrency_sleep_and_append, shared),
+                    partial(_concurrency_append, shared),
+                )
+            ),
+            concurrency=1,
+        ):
+            self.assertTupleEqual(next(expected), output)
+
+    async def test_a_eager_map2(self) -> None:
+        shared = Value("q", 0)
+        expected = iter(((1, 2), (0, 1)))
+        async for output in a_eager_map(
+            call,
+            any_iter(
+                (
+                    partial(_concurrency_sleep_and_append, shared),
+                    partial(_concurrency_append, shared),
+                )
+            ),
+            concurrency=2,
+        ):
+            self.assertTupleEqual(next(expected), output)
+
+    async def test_a_eagar_map3(self) -> None:
+        async for _ in a_eager_map(
+            call, any_iter((_concurrency_task, _concurrency_fail)), concurrency=1
+        ):
+            break
+
+    async def test_a_eagar_map4(self) -> None:
+        with self.assertRaises(RuntimeError):
+            async for _ in a_eager_map(
+                call, any_iter((_concurrency_task, _concurrency_fail)), concurrency=1
+            ):
+                pass
+
+    async def test_a_pool_imap1(self) -> None:
+        shared = Value("q", 0)
+        expected = iter(((0, 1), (1, 2)))
+        with Pool(1, initializer=_concurrency_pool_init, initargs=(shared,)) as pool:
+            async for output in a_pool_imap(
+                pool,
+                _concurrency_pool_run,
+                any_iter(
+                    (
+                        partial(
+                            _concurrency_sleep_and_append,
+                            sleep_multiplier=self._MP_POOL_SLEEP_MULTIPLIER,
+                        ),
+                        partial(
+                            _concurrency_append,
+                            sleep_multiplier=self._MP_POOL_SLEEP_MULTIPLIER,
+                        ),
+                    )
+                ),
+            ):
+                self.assertTupleEqual(next(expected), output)
+
+    async def test_a_pool_imap2(self) -> None:
+        shared = Value("q", 0)
+        expected = iter(((1, 2), (0, 1)))
+        with Pool(2, initializer=_concurrency_pool_init, initargs=(shared,)) as pool:
+            async for output in a_pool_imap(
+                pool,
+                _concurrency_pool_run,
+                any_iter(
+                    (
+                        partial(
+                            _concurrency_sleep_and_append,
+                            sleep_multiplier=self._MP_POOL_SLEEP_MULTIPLIER,
+                        ),
+                        partial(
+                            _concurrency_append,
+                            sleep_multiplier=self._MP_POOL_SLEEP_MULTIPLIER,
+                        ),
+                    )
+                ),
+            ):
+                self.assertTupleEqual(next(expected), output)
+
+    async def test_a_pool_imap3(self) -> None:
+        with Pool(1, initializer=_concurrency_pool_init) as pool:
+            async for _ in a_pool_imap(
+                pool,
+                _concurrency_pool_run,
+                any_iter((_concurrency_task, _concurrency_fail)),
+            ):
+                break
+
+    async def test_a_pool_imap4(self) -> None:
+        with self.assertRaises(RuntimeError):
+            with Pool(1, initializer=_concurrency_pool_init) as pool:
+                async for _ in a_pool_imap(
+                    pool,
+                    _concurrency_pool_run,
+                    any_iter((_concurrency_task, _concurrency_fail)),
+                ):
+                    pass
+
+
+class ParseTestCase(TestCase):
+    __slots__ = ()
+
+    def test_parse_content_type(self) -> None:
+        for input, output in {
+            "": ("", dict[str, str]()),
+            "text/plain": ("text/plain", dict[str, str]()),
+            "text/plain;": ("text/plain", {"": ""}),
+            '"text/plain"': ('"text/plain"', dict[str, str]()),
+            "'text/plain'": ("'text/plain'", dict[str, str]()),
+            "type/subtype;parameter=value": ("type/subtype", {"parameter": "value"}),
+            'text/html; charset="utf-8"': ("text/html", {"charset": "utf-8"}),
+            "multipart/mixed; boundary=text": ("multipart/mixed", {"boundary": "text"}),
+            "multipart/mixed; boundary=text;": (
+                "multipart/mixed",
+                {"boundary": "text", "": ""},
+            ),
+            'multipart/mixed; boundary="text"': (
+                "multipart/mixed",
+                {"boundary": "text"},
+            ),
+            "multipart/mixed; boundary='text'": (
+                "multipart/mixed",
+                {"boundary": "'text'"},
+            ),
+            """multipart/mixed;
+boundary=text""": (
+                "multipart/mixed",
+                {"boundary": "text"},
+            ),
+            "23e1jlfe;wp;e2e989yw;-2==1=3123": (
+                "23e1jlfe",
+                {"wp": "", "e2e989yw": "", "-2": "=1=3123"},
+            ),
+        }.items():
+            self.assertTupleEqual(output, parse_content_type(input))
 
     def test_parse_http_datetime(self) -> None:
         for input, output in {
