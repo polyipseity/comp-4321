@@ -1,17 +1,12 @@
 # -*- coding: UTF-8 -*-
 from asyncio import (
+    BoundedSemaphore,
     Queue,
     QueueEmpty,
     create_task,
     gather,
-    get_event_loop,
     get_running_loop,
-    new_event_loop,
-    set_event_loop,
-    wrap_future,
 )
-from atexit import register
-from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from email.message import Message
 from multiprocessing.pool import Pool
@@ -109,27 +104,23 @@ async def a_eager_map(
     max_size: int = 0,
 ) -> AsyncIterator[_U]:
     """
-    Async map that eagerly evaluates.
+    Async map that eagerly evaluates. `func` is run in the same thread.
+
+    Exceptions are only propagated when the items with exception are accessed.
     """
-    running = True
     queue = Queue[Awaitable[_U] | _Sentinel](max_size)
 
     async def submit():
         try:
+            concurrency_limiter = BoundedSemaphore(concurrency)
 
-            def execute_init():
-                loop = new_event_loop()
-                register(loop.close)
-                set_event_loop(loop)
+            async def execute(item: _T):
+                async with concurrency_limiter:
+                    return await func(item)
 
-            def execute(item: _T):
-                return get_event_loop().run_until_complete(func(item))
-
-            with ThreadPoolExecutor(concurrency, initializer=execute_init) as executor:
-                async for item in iterable:
-                    if not running:
-                        break
-                    await queue.put(wrap_future(executor.submit(execute, item)))
+            async for item in iterable:
+                async with concurrency_limiter:
+                    await queue.put(create_task(execute(item)))
         finally:
             await queue.put(_SENTINEL)
 
@@ -141,9 +132,9 @@ async def a_eager_map(
             yield await item
     finally:
         # stop and cleanup unconsumed awaitables
-        running = False
-        await submit_task
+        submit_task.cancel()
         await gather(
+            submit_task,
             *(
                 awaitables
                 for awaitables in iter_queue(queue)
@@ -173,16 +164,15 @@ async def a_pool_imap(
 ) -> AsyncIterator[_U]:
     """
     `Pool.imap` for async.
+
+    Exceptions are only propagated when the items with exception are accessed.
     """
-    running = True
     queue = Queue[Awaitable[_U] | _Sentinel](max_size)
 
     async def submit():
         try:
             loop = get_running_loop()
             async for item in iterable:
-                if not running:
-                    break
                 future = loop.create_future()
                 pool.apply_async(
                     func,
@@ -202,9 +192,9 @@ async def a_pool_imap(
             yield await item
     finally:
         # stop and cleanup unconsumed awaitables
-        running = False
-        await submit_task
+        submit_task.cancel()
         await gather(
+            submit_task,
             *(
                 awaitables
                 for awaitables in iter_queue(queue)
