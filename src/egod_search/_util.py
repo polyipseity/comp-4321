@@ -74,18 +74,6 @@ class SupportsWrite(Protocol[_AnyStr_contra]):
         ...
 
 
-@dataclass(slots=True)
-class Value(Generic[_T]):
-    """
-    A value container.
-    """
-
-    val: _T
-    """
-    The contained value.
-    """
-
-
 async def a_fetch_one(conn: Connection, *args: object) -> Row | None:
     """
     Return the first row of query result if exists or `None`.
