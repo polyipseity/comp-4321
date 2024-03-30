@@ -1,7 +1,6 @@
 # -*- coding: UTF-8 -*-
 from asyncio import Queue, TaskGroup, get_running_loop
 from concurrent.futures import ThreadPoolExecutor
-from dataclasses import dataclass
 from datetime import datetime
 from email.message import Message
 from multiprocessing.pool import Pool
@@ -12,7 +11,6 @@ from typing import (
     AsyncIterator,
     Awaitable,
     Callable,
-    Generic,
     Mapping,
     Protocol,
     TypeVar,

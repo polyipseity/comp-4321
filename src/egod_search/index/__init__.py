@@ -58,9 +58,9 @@ def index_page(page: UnindexedPage):
     title = (
         ""
         if html.title is None
-        else str(html.title)[
-            len("<title>") : -len("</title>")
-        ]  # Google Chrome displays text inside the `title` tag verbatim, including HTML tags. So `<title>a<span>b</span></title>` displays as `a<span>b</span>` instead of `ab`.
+        else str(html.title)[len("<title>") : -len("</title>")]
+        # Google Chrome displays text inside the `title` tag verbatim, including HTML tags.
+        # So `<title>a<span>b</span></title>` displays as `a<span>b</span>` instead of `ab`.
     )
     for title_tag in html.find_all("title"):
         assert isinstance(title_tag, Tag)
