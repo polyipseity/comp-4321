@@ -83,7 +83,9 @@ LIMIT ?""",
                     "main.words.content",
                 )
                 words_outer_joins = " ".join(
-                    f"FULL OUTER JOIN (SELECT word_id, frequency FROM main.word_occurrences{word_type.table_suffix} WHERE page_id = ?1) AS word_occurrences{word_type.table_suffix} USING (word_id)"
+                    f"FULL OUTER JOIN "
+                    "(SELECT word_id, frequency FROM main.word_occurrences{word_type.table_suffix} WHERE page_id = ?1) "
+                    "AS word_occurrences{word_type.table_suffix} USING (word_id)"
                     for word_type in Scheme.Page.WordOccurrenceType
                     if not word_type.is_default
                 )

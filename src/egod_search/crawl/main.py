@@ -225,19 +225,22 @@ def parser(parent: Callable[..., ArgumentParser] | None = None) -> ArgumentParse
         "--request-concurrency",
         type=int,
         default=6,
-        help="maximum number of concurrent requests, the crawling order remains deterministic; default 6",
+        help="maximum number of concurrent requests, "
+        "the crawling order remains deterministic; default 6",
     )
     parser.add_argument(
         "--index-concurrency",
         type=int,
         default=4,
-        help="maximum number of concurrent indexing, the indexing order remains deterministic; default 4",
+        help="maximum number of concurrent indexing, "
+        "the indexing order remains deterministic; default 4",
     )
     parser.add_argument(
         "--database-concurrency",
         type=int,
         default=1,
-        help="maximum number of concurrent database write, a value of more than 1 makes the database order nondeterministic; default 1",
+        help="maximum number of concurrent database write, "
+        "a value of more than 1 makes the database order nondeterministic; default 1",
     )
     parser.add_argument(
         "--no-progress",
