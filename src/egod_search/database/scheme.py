@@ -4,7 +4,6 @@ from aiosqlite import Connection
 from dataclasses import dataclass
 from functools import cached_property
 from importlib.resources import files
-from itertools import chain
 from json import dumps
 from types import TracebackType
 from typing import Collection, Mapping, NewType, Self, Sequence, Type
@@ -154,7 +153,14 @@ INSERT OR IGNORE INTO main.urls(content) VALUES (?)""",
                 f"""
 SELECT rowid FROM main.urls WHERE content IN ({', '.join('?' * len(vals))})
 ORDER BY CASE content {' '.join(('WHEN ? THEN ?',) * len(vals))} END""",
-                (*vals, *chain.from_iterable(map(reversed, enumerate(vals)))),
+                (
+                    *vals,
+                    *(
+                        val
+                        for keyed_vals in enumerate(vals)
+                        for val in reversed(keyed_vals)
+                    ),
+                ),
             )
         )
 
@@ -182,7 +188,14 @@ INSERT OR IGNORE INTO main.words(content) VALUES (?)""",
                 f"""
 SELECT rowid FROM main.words WHERE content IN ({', '.join('?' * len(vals))})
 ORDER BY CASE content {' '.join(('WHEN ? THEN ?',) * len(vals))} END""",
-                (*vals, *chain.from_iterable(map(reversed, enumerate(vals)))),
+                (
+                    *vals,
+                    *(
+                        val
+                        for keyed_vals in enumerate(vals)
+                        for val in reversed(keyed_vals)
+                    ),
+                ),
             )
         )
 
@@ -238,15 +251,13 @@ DELETE FROM main.word_occurrences{word_type.table_suffix} WHERE page_id = ?""",
             await self._conn.executemany(
                 f"""
 INSERT INTO main.word_occurrences{word_type.table_suffix}(page_id, word_id, positions) VALUES (?, ?, ?)""",
-                chain.from_iterable(
-                    (
-                        (url_id, word_id, dumps(tuple(typed_pos)))
-                        for type, typed_pos in positions.items()
-                        if type == word_type
-                    )
+                (
+                    (url_id, word_id, dumps(tuple(typed_pos)))
                     for positions, word_id in zip(
                         page.word_occurrences.values(), word_ids, strict=True
                     )
+                    for type, typed_pos in positions.items()
+                    if type == word_type
                 ),
             )
 

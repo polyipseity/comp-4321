@@ -7,6 +7,7 @@ from asyncio import (
     new_event_loop,
     set_event_loop,
     sleep,
+    to_thread,
     wait_for,
 )
 from atexit import register
@@ -547,11 +548,17 @@ class SQLiteTestCase(IsolatedAsyncioTestCase):
 
     # @override
     async def asyncSetUp(self) -> None:
-        await super().asyncSetUp()
+        ret = await super().asyncSetUp()
         self._conn = await connect("")
         await self._conn.executescript(
-            (files(PACKAGE_NAME) / "res/Chinook_Sqlite.sql").read_text()
+            await to_thread((files(PACKAGE_NAME) / "res/Chinook_Sqlite.sql").read_text)
         )
+        return ret
+
+    # @override
+    async def asyncTearDown(self) -> None:
+        await self._conn.close()
+        return await super().asyncTearDown()
 
     async def test_a_fetch_one(self) -> None:
         self.assertSequenceEqual(
@@ -607,11 +614,6 @@ LIMIT 0""",
                 default=...,
             ),
         )
-
-    # @override
-    async def asyncTearDown(self) -> None:
-        await self._conn.close()
-        return await super().asyncTearDown()
 
 
 if __name__ == "__main__":
