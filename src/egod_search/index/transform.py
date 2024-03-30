@@ -3,16 +3,20 @@ from functools import cache, wraps
 from importlib.resources import files
 from itertools import islice, pairwise, tee
 from re import DOTALL, compile
-from typing import Iterable, Iterator, Sequence
+from typing import Iterator, Sequence
 from unicodedata import normalize
 
 from .. import PACKAGE_NAME
 
-_STOP_WORDS = frozenset(
+_WORD_REGEX = compile(r"\S+", flags=DOTALL)
+
+STOP_WORDS = frozenset(
     word.casefold()
     for word in (files(PACKAGE_NAME) / "res/stop_words.txt").read_text().splitlines()
 )
-_WORD_REGEX = compile(r"\S+", flags=DOTALL)
+"""
+Set of stop words.
+"""
 
 
 def default_transform(text: str) -> Iterator[tuple[int, str]]:
@@ -21,7 +25,7 @@ def default_transform(text: str) -> Iterator[tuple[int, str]]:
     """
     words = split_words_iter(text)
     words = ((pos, normalize_text_for_search(word)) for pos, word in words)
-    words = remove_stop_words_iter(words)
+    words = ((pos, word) for pos, word in words if word not in STOP_WORDS)
     words = ((pos, porter(word)) for pos, word in words)
     return ((pos, word) for pos, word in words if word is not None)
 
@@ -278,25 +282,6 @@ _porter = _Porter()
 @cache
 def porter(word: str) -> str | None:
     return _porter(word)
-
-
-def remove_stop_words(words: Iterable[tuple[int, str]]) -> Sequence[tuple[int, str]]:
-    """
-    Remove stop words into a sequence of positions and words. See `remove_stop_words_iter`.
-    """
-    return tuple(remove_stop_words_iter(words))
-
-
-def remove_stop_words_iter(
-    words: Iterable[tuple[int, str]]
-) -> Iterator[tuple[int, str]]:
-    """
-    Remove stop words.
-    """
-    for position, word in words:
-        if word.casefold() in _STOP_WORDS:
-            continue
-        yield position, word
 
 
 def split_words(
