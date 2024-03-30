@@ -1,8 +1,17 @@
 # -*- coding: UTF-8 -*-
-from asyncio import Queue, TaskGroup, get_running_loop
-from concurrent.futures import ThreadPoolExecutor
+from asyncio import (
+    Future,
+    Queue,
+    TaskGroup,
+    get_event_loop,
+    get_running_loop,
+    new_event_loop,
+    set_event_loop,
+)
+from concurrent.futures import Future as CFuture, ThreadPoolExecutor
 from datetime import datetime
 from email.message import Message
+from functools import partial
 from multiprocessing.pool import Pool
 from sqlite3 import Row
 from aiosqlite import Connection
@@ -99,12 +108,28 @@ async def a_eager_map(
     """
     Async map that eagerly evaluates.
     """
+    loop = get_running_loop()
     queue = Queue[Awaitable[_U] | _Sentinel](max_size)
 
     async def submit():
-        with ThreadPoolExecutor(concurrency) as executor:
+        def execute_init():
+            set_event_loop(new_event_loop())
+
+        def execute(item: _T):
+            return get_event_loop().run_until_complete(func(item))
+
+        def done_callback(future: Future[_U], c_future: CFuture[_U]):
+            try:
+                future.set_result(c_future.result())
+            except Exception as exc:
+                future.set_exception(exc)
+
+        with ThreadPoolExecutor(concurrency, initializer=execute_init) as executor:
             async for item in iterable:
-                await queue.put(executor.submit(func, item).result())
+                future = loop.create_future()
+                future2 = executor.submit(execute, item)
+                future2.add_done_callback(partial(done_callback, future))
+                await queue.put(future)
         await queue.put(_SENTINEL)
 
     async with TaskGroup() as tg:
@@ -130,13 +155,13 @@ async def a_pool_imap(
         loop = get_running_loop()
         async for item in iterable:
             future = loop.create_future()
-            await queue.put(future)
             pool.apply_async(
                 func,
                 (item,),
                 callback=future.set_result,
                 error_callback=future.set_exception,
             )
+            await queue.put(future)
         await queue.put(_SENTINEL)
 
     async with TaskGroup() as tg:
