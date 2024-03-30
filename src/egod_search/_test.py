@@ -1,5 +1,6 @@
 # -*- coding: UTF-8 -*-
 from multiprocessing import cpu_count, dummy
+from os import chdir
 from pathlib import Path
 from types import TracebackType
 from typing import Self, Type
@@ -14,6 +15,7 @@ def main() -> None:
     Test this module.
     """
     cwd = Path(__file__).parent
+    chdir(cwd.parent)
     common_options = (
         "--coverage-branch",
         "--level",
