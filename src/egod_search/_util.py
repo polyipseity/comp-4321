@@ -1,19 +1,19 @@
 # -*- coding: UTF-8 -*-
 from asyncio import (
-    Future,
     Queue,
     QueueEmpty,
-    TaskGroup,
+    create_task,
     gather,
     get_event_loop,
     get_running_loop,
     new_event_loop,
     set_event_loop,
+    wrap_future,
 )
-from concurrent.futures import Future as CFuture, ThreadPoolExecutor
+from atexit import register
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from email.message import Message
-from functools import partial
 from multiprocessing.pool import Pool
 from sqlite3 import Row
 from aiosqlite import Connection
@@ -111,47 +111,45 @@ async def a_eager_map(
     """
     Async map that eagerly evaluates.
     """
+    running = True
     queue = Queue[Awaitable[_U] | _Sentinel](max_size)
 
     async def submit():
-        def execute_init():
-            set_event_loop(new_event_loop())
-
-        def execute(item: _T):
-            return get_event_loop().run_until_complete(func(item))
-
-        def done_callback(future: Future[_U], c_future: CFuture[_U]):
-            try:
-                future.set_result(c_future.result())
-            except Exception as exc:
-                future.set_exception(exc)
-
         try:
-            loop = get_running_loop()
+
+            def execute_init():
+                loop = new_event_loop()
+                register(loop.close)
+                set_event_loop(loop)
+
+            def execute(item: _T):
+                return get_event_loop().run_until_complete(func(item))
+
             with ThreadPoolExecutor(concurrency, initializer=execute_init) as executor:
                 async for item in iterable:
-                    future = loop.create_future()
-                    future2 = executor.submit(execute, item)
-                    future2.add_done_callback(partial(done_callback, future))
-                    await queue.put(future)
+                    if not running:
+                        break
+                    await queue.put(wrap_future(executor.submit(execute, item)))
         finally:
             await queue.put(_SENTINEL)
 
+    submit_task = create_task(submit())
     try:
-        async with TaskGroup() as tg:
-            tg.create_task(submit())
-            async for item in a_iter_queue(queue):
-                if isinstance(item, _Sentinel):
-                    break
-                yield await item
+        async for item in a_iter_queue(queue):
+            if isinstance(item, _Sentinel):
+                break
+            yield await item
     finally:
-        # cleanup remaining awaitables
+        # stop and cleanup unconsumed awaitables
+        running = False
+        await submit_task
         await gather(
             *(
                 awaitables
                 for awaitables in iter_queue(queue)
                 if not isinstance(awaitables, _Sentinel)
-            )
+            ),
+            return_exceptions=True,
         )
 
 
@@ -176,12 +174,15 @@ async def a_pool_imap(
     """
     `Pool.imap` for async.
     """
+    running = True
     queue = Queue[Awaitable[_U] | _Sentinel](max_size)
 
     async def submit():
         try:
             loop = get_running_loop()
             async for item in iterable:
+                if not running:
+                    break
                 future = loop.create_future()
                 pool.apply_async(
                     func,
@@ -193,21 +194,23 @@ async def a_pool_imap(
         finally:
             await queue.put(_SENTINEL)
 
+    submit_task = create_task(submit())
     try:
-        async with TaskGroup() as tg:
-            tg.create_task(submit())
-            async for item in a_iter_queue(queue):
-                if isinstance(item, _Sentinel):
-                    break
-                yield await item
+        async for item in a_iter_queue(queue):
+            if isinstance(item, _Sentinel):
+                break
+            yield await item
     finally:
-        # cleanup remaining awaitables
+        # stop and cleanup unconsumed awaitables
+        running = False
+        await submit_task
         await gather(
             *(
                 awaitables
                 for awaitables in iter_queue(queue)
                 if not isinstance(awaitables, _Sentinel)
-            )
+            ),
+            return_exceptions=True,
         )
 
 

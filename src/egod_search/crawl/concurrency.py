@@ -5,6 +5,7 @@ from asyncio import (
     Queue,
     QueueEmpty,
     Semaphore,
+    Task,
     TaskGroup,
     get_running_loop,
     sleep,
@@ -30,6 +31,7 @@ class ConcurrentCrawler:
         "_init_concurrency",
         "_running",
         "_stopping",
+        "_task_group",
         "_tasks",
     )
 
@@ -46,15 +48,18 @@ class ConcurrentCrawler:
         self._queue = Queue[Awaitable[Crawler.Result | Exception]](max_size)
         self._running = True
         self._stopping = Semaphore(0)
-        self._tasks = TaskGroup()
+        self._task_group = TaskGroup()
+        self._tasks = set[Task[object]]()
 
     async def __aenter__(self) -> AsyncIterator[Crawler.Result | Exception]:
         """
         Start the crawler.
         """
-        await self._tasks.__aenter__()
+        await self._task_group.__aenter__()
         for _ in range(self._init_concurrency):
-            self._tasks.create_task(self.run())
+            task = self._task_group.create_task(self.run())
+            self._tasks.add(task)  # keep a strong reference to the task
+            task.add_done_callback(self._tasks.remove)
         return self.pipe()
 
     async def __aexit__(
@@ -67,7 +72,7 @@ class ConcurrentCrawler:
         Stop and cleanup the crawler.
         """
         self.stop()
-        await self._tasks.__aexit__(exc_type, exc_val, exc_tb)
+        await self._task_group.__aexit__(exc_type, exc_val, exc_tb)
 
     async def run(self) -> None:
         """
