@@ -9,6 +9,7 @@ from asyncio import (
 )
 from datetime import datetime
 from email.message import Message
+from functools import partial
 from multiprocessing.pool import Pool
 from sqlite3 import Row
 from aiosqlite import Connection
@@ -177,8 +178,10 @@ async def a_pool_imap(
                 pool.apply_async(
                     func,
                     (item,),
-                    callback=future.set_result,
-                    error_callback=future.set_exception,
+                    callback=partial(loop.call_soon_threadsafe, future.set_result),
+                    error_callback=partial(
+                        loop.call_soon_threadsafe, future.set_exception
+                    ),
                 )
                 await queue.put(future)
         finally:
