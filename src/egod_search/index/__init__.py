@@ -4,7 +4,6 @@ from dataclasses import dataclass
 from functools import partial
 from time import time
 from typing import Collection, Mapping, MutableMapping, MutableSequence
-from sys import modules
 from bs4 import BeautifulSoup, Tag
 from yarl import URL
 
@@ -92,7 +91,3 @@ def index_page(page: UnindexedPage):
         links=page.links,
         word_occurrences=word_occurrences,
     )
-
-
-if "unittest" in modules:
-    from .test_transform import *

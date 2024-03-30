@@ -31,10 +31,11 @@ from operator import call
 from aiosqlite import connect
 from datetime import datetime, timezone
 from importlib.resources import files
-from unittest import IsolatedAsyncioTestCase, TestCase, main
+from unittest import TestCase, main
 
 from . import PACKAGE_NAME
 from ._util import (
+    AsyncTestCase,
     a_eager_map,
     a_fetch_one,
     a_fetch_value,
@@ -107,10 +108,10 @@ async def _concurrency_sleep_and_append(
     return before, after
 
 
-class ConcurrencyTestCase(IsolatedAsyncioTestCase):
+class ConcurrencyTestCase(AsyncTestCase):
     TASK_TIME = 0.01
 
-    _MP_POOL_SLEEP_MULTIPLIER = 16
+    _MP_POOL_SLEEP_MULTIPLIER = 64
     _QUEUE_PRODUCER_COUNT = 1024
     __slots__ = ()
 
@@ -226,7 +227,7 @@ class ConcurrencyTestCase(IsolatedAsyncioTestCase):
             ):
                 pass
 
-    async def test_a_pool_imap1(self) -> None:
+    async def test_a_pool_imap1_mp(self) -> None:
         shared = Value("q", 0)
         expected = iter(((0, 1), (1, 2)))
         with Pool(1, initializer=_concurrency_pool_init, initargs=(shared,)) as pool:
@@ -248,7 +249,7 @@ class ConcurrencyTestCase(IsolatedAsyncioTestCase):
             ):
                 self.assertTupleEqual(next(expected), output)
 
-    async def test_a_pool_imap2(self) -> None:
+    async def test_a_pool_imap2_mp(self) -> None:
         shared = Value("q", 0)
         expected = iter(((1, 2), (0, 1)))
         with Pool(2, initializer=_concurrency_pool_init, initargs=(shared,)) as pool:
@@ -270,7 +271,7 @@ class ConcurrencyTestCase(IsolatedAsyncioTestCase):
             ):
                 self.assertTupleEqual(next(expected), output)
 
-    async def test_a_pool_imap3(self) -> None:
+    async def test_a_pool_imap3_mp(self) -> None:
         with Pool(1, initializer=_concurrency_pool_init) as pool:
             async for _ in a_pool_imap(
                 pool,
@@ -279,7 +280,7 @@ class ConcurrencyTestCase(IsolatedAsyncioTestCase):
             ):
                 break
 
-    async def test_a_pool_imap4(self) -> None:
+    async def test_a_pool_imap4_mp(self) -> None:
         with self.assertRaises(RuntimeError):
             with Pool(1, initializer=_concurrency_pool_init) as pool:
                 async for _ in a_pool_imap(
@@ -543,22 +544,18 @@ boundary=text""": (
                 parse_http_datetime(input)
 
 
-class SQLiteTestCase(IsolatedAsyncioTestCase):
+class SQLiteTestCase(AsyncTestCase):
     __slots__ = ("_conn",)
 
     # @override
     async def asyncSetUp(self) -> None:
         ret = await super().asyncSetUp()
         self._conn = await connect("")
+        self.addAsyncCleanup(self._conn.close)
         await self._conn.executescript(
             await to_thread((files(PACKAGE_NAME) / "res/Chinook_Sqlite.sql").read_text)
         )
         return ret
-
-    # @override
-    async def asyncTearDown(self) -> None:
-        await self._conn.close()
-        return await super().asyncTearDown()
 
     async def test_a_fetch_one(self) -> None:
         self.assertSequenceEqual(

@@ -13,12 +13,12 @@ def main() -> None:
     run(
         (
             "--add-data",
-            f"{cwd / 'res'}:{PACKAGE_NAME}/res",
+            f"{(cwd / 'res').__fspath__()}:{PACKAGE_NAME}/res",
             "--name",
             NAME,
             "--nowindowed",
             "--onefile",
-            str(cwd / "_main.py"),
+            (cwd / "_main.py").__fspath__(),
         )
     )
 

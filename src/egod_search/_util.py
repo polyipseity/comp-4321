@@ -13,6 +13,7 @@ from functools import partial
 from multiprocessing.pool import Pool
 from sqlite3 import Row
 from types import EllipsisType
+from unittest import IsolatedAsyncioTestCase
 from aiosqlite import Connection
 from typing import (
     AsyncIterable,
@@ -72,6 +73,30 @@ class SupportsWrite(Protocol[_AnyStr_contra]):
         Write a string.
         """
         ...
+
+
+class _AsyncTestCase_FakeContextVars:
+    def run(self, func: Callable[..., _T], *args: object, **kwargs: object) -> _T:
+        return func(*args, **kwargs)
+
+
+class AsyncTestCase(IsolatedAsyncioTestCase):
+    """
+    `IsolatedAsyncioTestCase` that is compatible with `unittest-parallel`.
+    """
+
+    __slots__ = ("_runner",)
+
+    # @override
+    def __init__(
+        self, methodName: str = "runTest", *args: object, **kwargs: object
+    ) -> None:
+        """
+        Initialize `AsyncTestCase`.
+        """
+        ret = super().__init__(methodName, *args, **kwargs)
+        self._asyncioTestContext = _AsyncTestCase_FakeContextVars()
+        return ret
 
 
 async def a_fetch_one(conn: Connection, *args: object) -> Row | None:

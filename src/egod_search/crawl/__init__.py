@@ -2,7 +2,6 @@
 from aiohttp import ClientResponse, ClientSession
 from asyncio import Lock, QueueEmpty
 from bs4 import BeautifulSoup, SoupStrainer, Tag
-from sys import modules
 from types import EllipsisType, TracebackType
 from typing import (
     AbstractSet,
@@ -225,8 +224,3 @@ class Crawler:
         Already visited URLs.
         """
         return frozenset(self._visited)
-
-
-if "unittest" in modules:
-    from .test_concurrency import *
-    from .test_main import *

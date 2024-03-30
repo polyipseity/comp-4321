@@ -4,9 +4,10 @@ from importlib.resources import files
 from multiprocessing import Pool
 from os import cpu_count
 from unicodedata import normalize
-from unittest import IsolatedAsyncioTestCase, TestCase, main
+from unittest import TestCase, main
 
 from .. import PACKAGE_NAME
+from .._util import AsyncTestCase
 from .transform import default_transform, normalize_text_for_search, porter, split_words
 
 
@@ -223,23 +224,11 @@ def _word_test_porter(input: tuple[int, str]):
     return input[0], porter(input[1])
 
 
-class WordTestCase(IsolatedAsyncioTestCase):
-    __slots__ = ("_mp_pool",)
+class WordTestCase(AsyncTestCase):
+    __slots__ = ()
 
     _MP_POOL_CONCURRENCY = cpu_count() or 2
     _MP_POOL_CHUNK_SIZE = _MP_POOL_CONCURRENCY * 4
-
-    # @override
-    def setUp(self) -> None:
-        ret = super().setUp()
-        self._mp_pool = Pool(self._MP_POOL_CONCURRENCY)
-        self._mp_pool.__enter__()
-        return ret
-
-    # @override
-    def tearDown(self) -> None:
-        self._mp_pool.__exit__(None, None, None)
-        return super().tearDown()
 
     def test_normalize_text_for_search(self) -> None:
         for input, output in {
@@ -276,7 +265,7 @@ class WordTestCase(IsolatedAsyncioTestCase):
         }.items():
             self.assertEqual(output, normalize_text_for_search(input))
 
-    async def test_porter(self) -> None:
+    async def test_porter_mp(self) -> None:
         input, output = await gather(
             to_thread((files(PACKAGE_NAME) / "res/words.txt").read_text),
             to_thread(
@@ -286,16 +275,18 @@ class WordTestCase(IsolatedAsyncioTestCase):
         inputs = input.splitlines()
         actual_outputs = [""] * len(inputs)
 
-        def process():
-            for idx, actual_output in self._mp_pool.imap_unordered(
-                _word_test_porter, enumerate(inputs), self._MP_POOL_CHUNK_SIZE
-            ):
-                actual_outputs[idx] = actual_output
+        with Pool(self._MP_POOL_CONCURRENCY) as pool:
 
-        async with TaskGroup() as tg:
-            process_task = tg.create_task(to_thread(process))
-            outputs = output.splitlines()
-            await process_task
+            def process():
+                for idx, actual_output in pool.imap_unordered(
+                    _word_test_porter, enumerate(inputs), self._MP_POOL_CHUNK_SIZE
+                ):
+                    actual_outputs[idx] = actual_output
+
+            async with TaskGroup() as tg:
+                process_task = tg.create_task(to_thread(process))
+                outputs = output.splitlines()
+                await process_task
         self.assertListEqual(outputs, actual_outputs)
 
 
