@@ -68,7 +68,7 @@ def main() -> None:
             get_context=lambda *args, **kwargs: dummy,  # type: ignore
         ),
     ):
-        test_main((*common_options, "-k", "*.test_*_mp"))
+        test_main((*common_options, "--jobs", str(1), "-k", "*.test_*_mp"))
 
 
 if __name__ == "__main__":
