@@ -15,6 +15,7 @@ def main() -> None:
     """
     cwd = Path(__file__).parent
     common_options = (
+        "--coverage-branch",
         "--level",
         "class",
         "--start-directory",
