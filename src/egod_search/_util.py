@@ -2,7 +2,9 @@
 from asyncio import (
     Future,
     Queue,
+    QueueEmpty,
     TaskGroup,
+    gather,
     get_event_loop,
     get_running_loop,
     new_event_loop,
@@ -20,6 +22,7 @@ from typing import (
     AsyncIterator,
     Awaitable,
     Callable,
+    Iterator,
     Mapping,
     Protocol,
     TypeVar,
@@ -108,7 +111,6 @@ async def a_eager_map(
     """
     Async map that eagerly evaluates.
     """
-    loop = get_running_loop()
     queue = Queue[Awaitable[_U] | _Sentinel](max_size)
 
     async def submit():
@@ -124,19 +126,44 @@ async def a_eager_map(
             except Exception as exc:
                 future.set_exception(exc)
 
-        with ThreadPoolExecutor(concurrency, initializer=execute_init) as executor:
-            async for item in iterable:
-                future = loop.create_future()
-                future2 = executor.submit(execute, item)
-                future2.add_done_callback(partial(done_callback, future))
-                await queue.put(future)
-        await queue.put(_SENTINEL)
+        try:
+            loop = get_running_loop()
+            with ThreadPoolExecutor(concurrency, initializer=execute_init) as executor:
+                async for item in iterable:
+                    future = loop.create_future()
+                    future2 = executor.submit(execute, item)
+                    future2.add_done_callback(partial(done_callback, future))
+                    await queue.put(future)
+        finally:
+            await queue.put(_SENTINEL)
 
-    async with TaskGroup() as tg:
-        tg.create_task(submit())
-        while not isinstance(item := await queue.get(), _Sentinel):
+    try:
+        async with TaskGroup() as tg:
+            tg.create_task(submit())
+            async for item in a_iter_queue(queue):
+                if isinstance(item, _Sentinel):
+                    break
+                yield await item
+    finally:
+        # cleanup remaining awaitables
+        await gather(
+            *(
+                awaitables
+                for awaitables in iter_queue(queue)
+                if not isinstance(awaitables, _Sentinel)
+            )
+        )
+
+
+async def a_iter_queue(queue: Queue[_T]) -> AsyncIterator[_T]:
+    """
+    Iterate through a `Queue` without needing to call `task_done`.
+    """
+    while True:
+        try:
+            yield await queue.get()
+        finally:
             queue.task_done()
-            yield await item
 
 
 async def a_pool_imap(
@@ -152,23 +179,48 @@ async def a_pool_imap(
     queue = Queue[Awaitable[_U] | _Sentinel](max_size)
 
     async def submit():
-        loop = get_running_loop()
-        async for item in iterable:
-            future = loop.create_future()
-            pool.apply_async(
-                func,
-                (item,),
-                callback=future.set_result,
-                error_callback=future.set_exception,
-            )
-            await queue.put(future)
-        await queue.put(_SENTINEL)
+        try:
+            loop = get_running_loop()
+            async for item in iterable:
+                future = loop.create_future()
+                pool.apply_async(
+                    func,
+                    (item,),
+                    callback=future.set_result,
+                    error_callback=future.set_exception,
+                )
+                await queue.put(future)
+        finally:
+            await queue.put(_SENTINEL)
 
-    async with TaskGroup() as tg:
-        tg.create_task(submit())
-        while not isinstance(item := await queue.get(), _Sentinel):
-            queue.task_done()
-            yield await item
+    try:
+        async with TaskGroup() as tg:
+            tg.create_task(submit())
+            async for item in a_iter_queue(queue):
+                if isinstance(item, _Sentinel):
+                    break
+                yield await item
+    finally:
+        # cleanup remaining awaitables
+        await gather(
+            *(
+                awaitables
+                for awaitables in iter_queue(queue)
+                if not isinstance(awaitables, _Sentinel)
+            )
+        )
+
+
+def iter_queue(queue: Queue[_T]) -> Iterator[_T]:
+    """
+    Iterate all items available now in `Queue`.
+    """
+    while True:
+        try:
+            yield queue.get_nowait()
+        except QueueEmpty:
+            break
+        queue.task_done()
 
 
 def parse_content_type(val: str) -> tuple[str, Mapping[str, str]]:

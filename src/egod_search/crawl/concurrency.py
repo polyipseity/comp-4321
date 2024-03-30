@@ -127,7 +127,7 @@ class ConcurrentCrawler:
                     yield value
                 if isinstance(value, tuple):
                     await self._crawler.enqueue_many(
-                        (new_urls := value[2]), ignore_visited=True
+                        new_urls := value[2], ignore_visited=True
                     )
             finally:
                 self._queue.task_done()
