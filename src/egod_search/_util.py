@@ -12,6 +12,7 @@ from email.message import Message
 from functools import partial
 from multiprocessing.pool import Pool
 from sqlite3 import Row
+from types import EllipsisType
 from aiosqlite import Connection
 from typing import (
     AsyncIterable,
@@ -43,13 +44,6 @@ _HTTP_LAST_MODIFIED = {
     "Nov": "11",
     "Dec": "12",
 }
-
-
-class _Sentinel:
-    __slots__ = ()
-
-
-_SENTINEL = _Sentinel()
 
 
 class SupportsRead(Protocol[_AnyStr_co]):
@@ -109,7 +103,7 @@ async def a_eager_map(
 
     Exceptions are only propagated when the items with exception are accessed.
     """
-    queue = Queue[Awaitable[_U] | _Sentinel](max_size)
+    queue = Queue[Awaitable[_U] | EllipsisType](max_size)
 
     async def submit():
         try:
@@ -123,12 +117,12 @@ async def a_eager_map(
                 async with concurrency_limiter:
                     await queue.put(create_task(execute(item)))
         finally:
-            await queue.put(_SENTINEL)
+            await queue.put(...)
 
     submit_task = create_task(submit())
     try:
         async for item in a_iter_queue(queue):
-            if isinstance(item, _Sentinel):
+            if item is ...:
                 break
             yield await item
     finally:
@@ -136,11 +130,7 @@ async def a_eager_map(
         submit_task.cancel()
         await gather(
             submit_task,
-            *(
-                awaitables
-                for awaitables in iter_queue(queue)
-                if not isinstance(awaitables, _Sentinel)
-            ),
+            *(awaitable for awaitable in iter_queue(queue) if awaitable is not ...),
             return_exceptions=True,
         )
 
@@ -168,7 +158,7 @@ async def a_pool_imap(
 
     Exceptions are only propagated when the items with exception are accessed.
     """
-    queue = Queue[Awaitable[_U] | _Sentinel](max_size)
+    queue = Queue[Awaitable[_U] | EllipsisType](max_size)
 
     async def submit():
         try:
@@ -185,12 +175,12 @@ async def a_pool_imap(
                 )
                 await queue.put(future)
         finally:
-            await queue.put(_SENTINEL)
+            await queue.put(...)
 
     submit_task = create_task(submit())
     try:
         async for item in a_iter_queue(queue):
-            if isinstance(item, _Sentinel):
+            if item is ...:
                 break
             yield await item
     finally:
@@ -198,11 +188,7 @@ async def a_pool_imap(
         submit_task.cancel()
         await gather(
             submit_task,
-            *(
-                awaitables
-                for awaitables in iter_queue(queue)
-                if not isinstance(awaitables, _Sentinel)
-            ),
+            *(awaitable for awaitable in iter_queue(queue) if awaitable is not ...),
             return_exceptions=True,
         )
 
