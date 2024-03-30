@@ -27,7 +27,7 @@ def default_transform(text: str) -> Iterator[tuple[int, str]]:
     words = ((pos, normalize_text_for_search(word)) for pos, word in words)
     words = ((pos, word) for pos, word in words if word not in STOP_WORDS)
     words = ((pos, porter(word)) for pos, word in words)
-    return ((pos, word) for pos, word in words if word is not None)
+    return ((pos, word) for pos, word in words if word)
 
 
 def normalize_text_for_search(text: str) -> str:
@@ -88,7 +88,7 @@ class _Porter:
     }
     _STEP3_REPLACEMENTS = {
         "icate": "ic",
-        "active": "",
+        "ative": "",
         "alize": "al",
         "alise": "al",
         "iciti": "ic",
@@ -123,14 +123,14 @@ class _Porter:
     _WXY = frozenset("wxy")
     __slots__ = ()
 
-    def __call__(self, word: str) -> str | None:
+    def __call__(self, word: str) -> str:
         """
         The Porter stemming algorithm.
         """
         word = normalize_text_for_search(word)
         if len(word) <= 2:
-            return word or None
-        return self.strip_suffix(self.strip_prefix(word)) or None
+            return word
+        return self.strip_suffix(self.strip_prefix(word))
 
     def cvc(self, word: str) -> bool:
         """
@@ -197,31 +197,30 @@ class _Porter:
         Step 1 of the Porter stemming algorithm.
         """
         if word.endswith("s"):
-            if word.endswith(("sses", "ies")):
+            if word.endswith(("sses", "ies")) and word not in {"sses", "ies"}:
                 word = word[:-2]
             else:
                 if len(word) == 1:
                     return ""
                 if word[-2] != "s":
                     word = word[:-1]
-        if word.endswith("eed"):
+        if word.endswith("eed") and len(word) > 3:
             if self.measure_vowel_segments(word[:-3]) > 0:
                 word = word[:-1]
-        else:
-            if (word2 := word.removesuffix("ed")) != word or (
-                word2 := word.removesuffix("ing")
-            ) != word:
-                word = word2
-                if self.contain_vowels(word):
-                    if len(word) <= 1:
-                        return word
-                    if word.endswith(("at", "bl", "iz")):
-                        word += "e"
-                    else:
-                        if word[-1] not in self._LSZ and word[-1] == word[-2]:
-                            word = word[:-1]
-                        elif self.measure_vowel_segments(word) == 1 and self.cvc(word):
-                            word += "e"
+        elif (
+            (word2 := word.removesuffix("ed")) != word
+            or (word2 := word.removesuffix("ing")) != word
+        ) and self.contain_vowels(word2):
+            word = word2
+            if len(word) <= 1:
+                return word
+            if word.endswith(("at", "bl", "iz")) and len(word) > 2:
+                word += "e"
+            else:
+                if word[-1] not in self._LSZ and word[-1] == word[-2]:
+                    word = word[:-1]
+                elif self.measure_vowel_segments(word) == 1 and self.cvc(word):
+                    word += "e"
         if word.endswith("y") and self.contain_vowels(word[:-1]):
             word = f"{word[:-1]}i"
         return word
@@ -270,7 +269,7 @@ class _Porter:
                 word = word2
         if len(word) == 1:
             return word
-        if "l" in word[-2:] and self.measure_vowel_segments(word) > 1:
+        if word[-2:] == "ll" and self.measure_vowel_segments(word) > 1:
             word = word[:-1]
         return word
 
@@ -280,7 +279,7 @@ _porter = _Porter()
 
 @wraps(_porter)
 @cache
-def porter(word: str) -> str | None:
+def porter(word: str) -> str:
     return _porter(word)
 
 
