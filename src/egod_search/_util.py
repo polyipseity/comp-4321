@@ -140,8 +140,9 @@ async def a_iter_queue(queue: Queue[_T]) -> AsyncIterator[_T]:
     Iterate through a `Queue` without needing to call `task_done`.
     """
     while True:
+        ret = await queue.get()
         try:
-            yield await queue.get()
+            yield ret
         finally:
             queue.task_done()
 
@@ -199,10 +200,13 @@ def iter_queue(queue: Queue[_T]) -> Iterator[_T]:
     """
     while True:
         try:
-            yield queue.get_nowait()
+            ret = queue.get_nowait()
         except QueueEmpty:
             break
-        queue.task_done()
+        try:
+            yield ret
+        finally:
+            queue.task_done()
 
 
 def parse_content_type(val: str) -> tuple[str, Mapping[str, str]]:
