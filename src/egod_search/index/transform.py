@@ -3,7 +3,7 @@ from functools import cache, wraps
 from importlib.resources import files
 from itertools import islice, pairwise, tee
 from re import DOTALL, compile
-from typing import Iterator, Sequence
+from typing import Iterator
 from unicodedata import normalize
 
 from .. import PACKAGE_NAME
@@ -23,7 +23,7 @@ def default_transform(text: str) -> Iterator[tuple[int, str]]:
     """
     Default text transformation pipeline.
     """
-    words = split_words_iter(text)
+    words = split_words(text)
     words = ((pos, normalize_text_for_search(word)) for pos, word in words)
     words = ((pos, word) for pos, word in words if word not in STOP_WORDS)
     words = ((pos, porter(word)) for pos, word in words)
@@ -284,16 +284,7 @@ def porter(word: str) -> str | None:
     return _porter(word)
 
 
-def split_words(
-    text: str, *args: object, **kwargs: object
-) -> Sequence[tuple[int, str]]:
-    """
-    Split text into a sequence of positions and words. See `split_words_iter`.
-    """
-    return tuple(split_words_iter(text, *args, **kwargs))
-
-
-def split_words_iter(text: str) -> Iterator[tuple[int, str]]:
+def split_words(text: str) -> Iterator[tuple[int, str]]:
     """
     Split text into a sequence of positions and words.
 
