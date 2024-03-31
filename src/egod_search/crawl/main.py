@@ -8,7 +8,7 @@ from anyio import Path
 from argparse import ZERO_OR_MORE, ArgumentParser, Namespace
 from functools import wraps
 from tqdm.auto import tqdm
-from tqdm.contrib.logging import tqdm_logging_redirect  # type: ignore
+from tqdm.contrib.logging import logging_redirect_tqdm
 from typing import AsyncIterator, Callable, Collection
 from yarl import URL
 
@@ -44,7 +44,7 @@ async def main(
 
     basicConfig(level=INFO)
     logger = getLogger(_PROGRAM)
-    with tqdm_logging_redirect(loggers=(logger,)):
+    with logging_redirect_tqdm(loggers=(logger,)) as a:
 
         if page_count is None:
             page_count = len(urls)
