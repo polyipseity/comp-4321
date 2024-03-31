@@ -33,8 +33,6 @@ dependencies = [
 	"asyncstdlib>=3.12.0", # async utilities
 	"beautifulsoup4>=4.12.0", # parse HTML
 	"tqdm>=4.66.0", # progress bar
-	"pyinstaller>=6.5.0", # build native executables
-	"unittest-parallel>=1.6.0", # `unittest` with coverage and parallelism
 	"yarl>=1.9.0", # URL utilities
 ]
 description = "HKUST COMP 4321 sources dropped from heaven by E God himself!"
@@ -44,6 +42,13 @@ license = {file = "LICENSE.txt"}
 name = "egod-search" # synchronize with `__init__.py`
 readme = "README.md"
 requires-python = ">=3.11.0"
+
+[project.optional-dependencies]
+all = ["egod_search[dev]"]
+dev = [
+	"pyinstaller>=6.5.0", # build native executables
+	"unittest-parallel>=1.6.0", # `unittest` with coverage and parallelism
+]
 
 [project.scripts]
 egod-search-build = "egod_search._build:main"
