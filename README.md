@@ -64,6 +64,8 @@ pip install -r requirements.txt
 
 This command will install all the necessary packages specified in the "requirements.txt" file.
 
+If there is an error mentioning `requires a different Python`, for example `ERROR: Package 'egod-search' requires a different Python: 3.10.11 not in '>=3.11.0'`, please go to https://www.python.org/downloads/ and download the newest version of Python.
+
 **Step 7:**
 Run the crawler using the command for Phase 1.
 
@@ -72,6 +74,8 @@ _Note: Check again to see if `(venv)` appears in the command prompt for using th
 ```shell
 python -m egod_search.crawl -n 30 -d database.db -s spider_result.txt https://www.cse.ust.hk/~kwtleung/COMP4321/testpage.htm
 ```
+
+On Windows, after the program has finished, the CLI may freeze if the program finishes too quickly. This is a [CPython bug](https://github.com/python/cpython/issues/111604) which is out of our control. If it happens, just Ctrl+C to get out of it and ignore the stacktrace as the stacktrace is harmless. 
 
 In case of re-run, and the database needs to be cleared, use the appropriate command based on your operating system:
 
@@ -86,3 +90,4 @@ On Linux or macOS:
 ```shell
 rm database.db
 ```
+
