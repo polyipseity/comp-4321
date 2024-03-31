@@ -44,7 +44,9 @@ async def main(
     basicConfig(level=INFO)
     logger = getLogger(_PROGRAM)
     with logging_redirect_tqdm(loggers=(logger,)):
-
+        total_steps = 1
+        if summary_path is not None:
+            total_steps += 1
         if page_count is None:
             page_count = len(urls)
 
@@ -60,7 +62,7 @@ async def main(
             raise ValueError(
                 f"Database concurrency must be positive: {database_concurrency}"
             )
-
+        print(f"Step 1/{total_steps}:")
         async with (
             Scheme(connect(database_path.__fspath__()), init=True) as database,
             Crawler() as crawler,
@@ -138,6 +140,7 @@ async def main(
                             break
 
         if summary_path is not None:
+            print(f"Step 2/{total_steps}:")
             async with Scheme(connect(database_path.__fspath__())) as database:
                 await summary_path.write_text(
                     await summary_s(
@@ -149,6 +152,7 @@ async def main(
                     ),
                     encoding="utf-8",
                 )
+        print("Finished")
 
 
 def parser(parent: Callable[..., ArgumentParser] | None = None) -> ArgumentParser:
