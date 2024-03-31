@@ -1,4 +1,4 @@
--- main.urls
+-- main.urls, main.urls_content_index
 CREATE TABLE IF NOT EXISTS main.urls (
   rowid INTEGER NOT NULL PRIMARY KEY,
   content TEXT NOT NULL UNIQUE,
@@ -36,7 +36,7 @@ WHERE EXISTS (
     WHERE value = OLD.rowid
   );
 END;
--- main.words
+-- main.words, main.words_content_index
 CREATE TABLE IF NOT EXISTS main.words (
   rowid INTEGER NOT NULL PRIMARY KEY,
   content TEXT NOT NULL UNIQUE
@@ -168,7 +168,7 @@ WHERE json(NEW.positions) != (
       )
   );
 END;
--- main.word_occurrences_title
+-- main.word_occurrences_title, main.word_occurrences_title_word_id_index
 CREATE TABLE IF NOT EXISTS main.word_occurrences_title (
   page_id INTEGER NOT NULL REFERENCES pages(rowid) ON UPDATE CASCADE ON DELETE RESTRICT,
   word_id INTEGER NOT NULL REFERENCES words(rowid) ON UPDATE CASCADE ON DELETE RESTRICT,
@@ -178,6 +178,8 @@ CREATE TABLE IF NOT EXISTS main.word_occurrences_title (
   PRIMARY KEY (page_id, word_id)
 ) STRICT,
 WITHOUT ROWID;
+CREATE INDEX IF NOT EXISTS main.word_occurrences_title_word_id_index ON word_occurrences_title (word_id ASC);
+-- https://stackoverflow.com/a/74133053
 -- main.word_occurrences_title_check_positions_insert
 DROP TRIGGER IF EXISTS main.word_occurrences_title_check_positions_insert;
 CREATE TRIGGER main.word_occurrences_title_check_positions_insert BEFORE
