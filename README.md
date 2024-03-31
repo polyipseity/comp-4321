@@ -85,9 +85,11 @@ Your Python version is outdated and does not support (features the code relies o
 ## FAQ
 
 Q: Install does not work
+
 A1: Check again that `(venv)` appears in the command prompt for using the virtual environment. The virtual environment is not entered by default. 
 
 Q: `venv\Scripts\activate` does not work for my Windows machine
+
 A: For Windows machines with MinGW-w64, `python.exe` may refer to the MinGW-w64 executable. It does not work because it generates Linux version of virtual environment script, and likely does not come with Python >= 3.11. Use `py` which can guarantee running the Windows Python executable. 
 
 ## Tested working platforms
