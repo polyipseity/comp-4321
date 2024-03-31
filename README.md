@@ -1,7 +1,7 @@
 # Installation instructions
 
 ## Step 1
-Set up a Python environment: Ensure that you have Python installed on your system. You can download the latest version of Python from the official Python website (<https://www.python.org>) and follow the installation instructions for your operating system.
+Set up a Python environment: Ensure that you have at least Python >= 3.11 installed on your system. You can download the latest version of Python from the official Python website (<https://www.python.org>) and follow the installation instructions for your operating system.
 
 _Note: For Windows, you may want to install the Python launcher, enabling you to use `py` in place of `python` for consistently running the latest version of Python, avoiding any conflicts with third-party software and outdated Python versions._
 
@@ -76,14 +76,20 @@ rm database.db
 
 ## Important notices
 
-On Windows, after the program has finished, the CLI may freeze if the program finishes too quickly. This is a [CPython bug](https://github.com/python/cpython/issues/111604) which is out of our control. When the program shows `Finished` and the bug happens, just Ctrl+C to get out of it and ignore the stacktrace as the stacktrace is harmless. 
+The program says it is `Finished` but does not end, just gets stuck:
+On Windows, after the program has finished, the CLI may freeze if the program finishes too quickly. This is a [CPython bug](https://github.com/python/cpython/issues/111604) and is out of our control. Just Ctrl+C to get out of it and ignore the errors as they are harmless.  
+
+If there is an error mentioning `requires a different Python`, for example `ERROR: Package 'egod-search' requires a different Python: 3.10.11 not in '>=3.11.0'`:
+Your Python version is outdated and does not support (features the code relies on)[https://stackoverflow.com/a/77247460]. Please go to https://www.python.org/downloads/ and download the newest version of Python.
 
 ## FAQ
 
 Q: Install does not work
+
 A1: Check again that `(venv)` appears in the command prompt for using the virtual environment. The virtual environment is not entered by default. 
 
 Q: `venv\Scripts\activate` does not work for my Windows machine
+
 A: For Windows machines with MinGW-w64, `python.exe` may refer to the MinGW-w64 executable. It does not work because it generates Linux version of virtual environment script, and likely does not come with Python >= 3.11. Use `py` which can guarantee running the Windows Python executable. 
 
 ## Tested working platforms
