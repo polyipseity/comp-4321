@@ -3,12 +3,12 @@ from json import dumps, load
 from logging import INFO, basicConfig, getLogger
 from sys import executable, stderr, stdin, stdout
 from anyio import Path
+from asyncio.subprocess import create_subprocess_exec
 from argparse import ArgumentParser, Namespace
 from functools import wraps
 from typing import Callable
 from nicegui import ui
 from pathlib import Path as SyncPath
-from subprocess import run
 
 try:
     from .. import VERSION
@@ -73,15 +73,16 @@ def parser(parent: Callable[..., ArgumentParser] | None = None) -> ArgumentParse
                 },
             )
         )
-        run(
-            (
-                executable,
-                Path(__file__).parent / "main.py",
-            ),
-            check=True,
-            stderr=stderr,
-            stdin=stdin,
-            stdout=stdout,
+        exit(
+            await (
+                await create_subprocess_exec(
+                    executable,
+                    Path(__file__).parent / "main.py",
+                    stderr=stderr,
+                    stdin=stdin,
+                    stdout=stdout,
+                )
+            ).wait()
         )
 
     parser.set_defaults(invoke=invoke)
