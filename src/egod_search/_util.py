@@ -163,6 +163,9 @@ async def a_eager_map(
                     break
                 yield await item
         submit_task.result()
+    except* GeneratorExit as exc:
+        # do not catch `GeneratorExit`
+        raise exc.exceptions[0]
     finally:
         # stop and cleanup unconsumed awaitables
         await gather(
@@ -241,6 +244,9 @@ async def a_pool_imap(
                     break
                 yield await item
         submit_task.result()
+    except* GeneratorExit as exc:
+        # do not catch `GeneratorExit`
+        raise exc.exceptions[0]
     finally:
         # stop and cleanup unconsumed awaitables
         await gather(
