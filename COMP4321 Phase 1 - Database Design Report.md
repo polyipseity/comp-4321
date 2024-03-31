@@ -1,6 +1,6 @@
 # COMP4321 Phase 1 – Database Design Report <!-- markdownlint-disable MD024 -->
 
-![database.png](database.png)
+![database.svg](database.svg)
 
 ## General Principles
 
