@@ -22,6 +22,8 @@ from ..index import UnindexedPage, index_page
 _PROGRAM = __package__ or __name__
 _QUEUE_MAX_SIZE = 1024
 
+_LOGGER = getLogger(_PROGRAM)
+
 
 async def main(
     urls: Collection[URL],
@@ -42,8 +44,7 @@ async def main(
     """
 
     basicConfig(level=INFO)
-    logger = getLogger(_PROGRAM)
-    with logging_redirect_tqdm(loggers=(logger,)):
+    with logging_redirect_tqdm():
         total_steps = 1
         if summary_path is not None:
             total_steps += 1
@@ -105,13 +106,13 @@ async def main(
                     async def preprocess() -> AsyncIterator[UnindexedPage]:
                         async for response in responses:
                             if isinstance(response, Crawler.CrawlError):
-                                logger.exception("Failed to crawl", exc_info=response)
+                                _LOGGER.exception("Failed to crawl", exc_info=response)
                                 continue
                             response, content, outlinks = response
                             try:
                                 response.raise_for_status()
                             except ClientResponseError:
-                                logger.exception("Failed to crawl")
+                                _LOGGER.exception("Failed to crawl")
                                 continue
                             if content is None:
                                 continue
