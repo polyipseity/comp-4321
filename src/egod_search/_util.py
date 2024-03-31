@@ -174,6 +174,8 @@ async def a_eager_map(
         submit_task.result()
     except* GeneratorExit as exc:
         # do not catch `GeneratorExit`
+        pass
+    except* Exception as exc:
         raise exc.exceptions[0]
     finally:
         # stop and cleanup unconsumed awaitables
