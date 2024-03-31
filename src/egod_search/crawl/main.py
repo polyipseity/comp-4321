@@ -66,25 +66,21 @@ async def main(
             Scheme(connect(database_path.__fspath__()), init=True) as database,
             Crawler() as crawler,
         ):
-            pages_crawled = 0
-            pages_crawled_lock = Lock()
+            pages_written = 0
             database_lock = Lock()
 
             async def write(page: Scheme.Page | None) -> bool | None:
                 # multiple instances make the database insertion order nondeterministic
                 if page is None:
                     return False
-                nonlocal pages_crawled
-                async with pages_crawled_lock:
-                    if pages_crawled < page_count:
-                        pages_crawled += 1
-                    else:
-                        return None
-                async with (
-                    database_lock
-                ):  # SQLite does not support concurrency in practice... others may though.
+                async with database_lock:
+                    # SQLite does not support concurrency in practice... others may though.
+                    nonlocal pages_written
+                    if pages_written >= page_count:
+                        return False
                     await database.index_page(page)
                     await database.conn.commit()
+                    pages_written += 1
                 return True
 
             with (
@@ -96,7 +92,7 @@ async def main(
                     unit="pages",
                 ) as progress,
             ):
-                await crawler.enqueue_many(urls)
+                crawler.enqueue(urls)
                 async with ConcurrentCrawler(
                     crawler,
                     max_size=_QUEUE_MAX_SIZE,
@@ -105,7 +101,7 @@ async def main(
 
                     async def preprocess() -> AsyncIterator[UnindexedPage]:
                         async for response in responses:
-                            if isinstance(response, Exception):
+                            if isinstance(response, Crawler.CrawlError):
                                 logger.exception("Failed to crawl", exc_info=response)
                                 continue
                             response, content, outlinks = response
@@ -137,7 +133,7 @@ async def main(
                     ):
                         if written:
                             progress.update()
-                        elif written is None:
+                        if pages_written >= page_count:
                             break
 
         if summary_path is not None:

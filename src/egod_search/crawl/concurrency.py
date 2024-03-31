@@ -1,35 +1,36 @@
 # -*- coding: UTF-8 -*-
 from asyncio import (
     Event,
-    Lock,
     Queue,
     QueueEmpty,
     Semaphore,
     Task,
     TaskGroup,
+    gather,
     get_running_loop,
     sleep,
 )
 from types import TracebackType
 from typing import AsyncIterator, Awaitable, Type
+from yarl import URL
 
 from . import Crawler
+from .._util import iter_queue
 
 
 class ConcurrentCrawler:
     """
     A wrapper over a crawler that operates on it concurrently.
+    Runs until there are no more links to be crawled or is manually stopped.
 
-    Runs until there are no more links to be crawled or is manually stopped. Cannot be reused afterwards.
+    Can be run many times.
     """
 
     __slots__ = (
         "_awake",
         "_crawler",
-        "_dequeue_lock",
         "_queue",
         "_init_concurrency",
-        "_running",
         "_stopping",
         "_task_group",
         "_tasks",
@@ -43,23 +44,27 @@ class ConcurrentCrawler:
         """
         self._awake = Event()
         self._crawler = crawler
-        self._dequeue_lock = Lock()
         self._init_concurrency = init_concurrency
-        self._queue = Queue[Awaitable[Crawler.Result | Exception]](max_size)
-        self._running = True
+        self._queue = Queue[
+            Awaitable[tuple[URL, Crawler.Result | Crawler.CrawlError] | QueueEmpty]
+        ](max_size)
         self._stopping = Semaphore(0)
         self._task_group = TaskGroup()
         self._tasks = set[Task[object]]()
 
-    async def __aenter__(self) -> AsyncIterator[Crawler.Result | Exception]:
+    async def __aenter__(self) -> AsyncIterator[Crawler.Result | Crawler.CrawlError]:
         """
         Start the crawler.
+
+        Ensure the previous run has finished before calling.
         """
+        self._stopping = Semaphore(0)
+        self._task_group = TaskGroup()
         await self._task_group.__aenter__()
         for _ in range(self._init_concurrency):
             task = self._task_group.create_task(self.run())
+            task.add_done_callback(self._tasks.discard)
             self._tasks.add(task)  # keep a strong reference to the task
-            task.add_done_callback(self._tasks.remove)
         return self.pipe()
 
     async def __aexit__(
@@ -76,69 +81,95 @@ class ConcurrentCrawler:
 
     async def run(self) -> None:
         """
-        Run the crawler.
-
-        Can be started multiple times. Cannot start again after stopping.
+        Start a crawler instance. Can be started multiple times in a run.
         """
         # always BFS, even if there are multiple instances
         loop = get_running_loop()
         self._stopping.release()
-        while self._running:
-            await self._queue.put((future := loop.create_future()))
+        while True:
+            await self._queue.put(future := loop.create_future())
             try:
-                async with self._dequeue_lock:
-                    url = await self._crawler.dequeue()
-                future.set_result(await self._crawler.crawl(url))
-            except Exception as exc:
-                future.set_result(exc)
-                if isinstance(exc, QueueEmpty):
-                    # no URLs to crawl
+                try:
+                    url = self._crawler.dequeue()
+                except QueueEmpty as exc:
+                    future.set_result(exc)
                     async with self._stopping:
-                        # wait for new URLs or stop
                         await self._awake.wait()
+                    continue
+                try:
+                    future.set_result((url, await self._crawler.crawl(url)))
+                except Crawler.CrawlError as exc:
+                    future.set_result((url, exc))
+                except:
+                    self._crawler.reset((url,))
+                    self._crawler.enqueue((url,), before=True)
+                    raise
+            except:
+                future.cancel()
+                raise
 
     def stop(self) -> None:
         """
-        Stop all crawlers (eventually). Cannot be restarted again.
+        Stop all crawlers (eventually).
         """
-        self._running = False
-        self._awake.set()
+        for task in self._tasks:
+            task.cancel()
+        self._tasks.clear()
 
-    async def pipe(self) -> AsyncIterator[Crawler.Result | Exception]:
+    async def pipe(self) -> AsyncIterator[Crawler.Result | Crawler.CrawlError]:
         """
         Pipe the output. Outbound links are added as output are piped from this iterator.
 
-        Can only be called once.
+        It must be called once and only once per run.
         """
         # only one instance allowed
         while self._stopping.locked():
-            await sleep(0)
-        while True:
-            try:
-                value = self._queue.get_nowait()
-            except QueueEmpty:
-                if self._running:
-                    if self._stopping.locked():
-                        # all crawlers are stopping
-                        self.stop()
-                    await sleep(0)  # yield to crawlers
-                    continue
-                else:
-                    break
-            try:
-                new_urls = None
-                value = await value
-                if not isinstance(value, QueueEmpty):
-                    yield value
-                if isinstance(value, tuple):
-                    await self._crawler.enqueue_many(
-                        new_urls := value[2], ignore_visited=True
-                    )
-            finally:
-                self._queue.task_done()
+            await sleep(0)  # ensure at least one crawler is running
 
-            if new_urls:
-                # new URLs available
-                self._awake.set()
-                self._awake.clear()
-                await sleep(0)  # yield to crawlers
+        try:
+            while True:
+                try:
+                    value = self._queue.get_nowait()
+                except QueueEmpty:
+                    if self._tasks:
+                        if self._stopping.locked():
+                            self.stop()  # all crawlers are stopping
+                        await sleep(0)  # yield to crawlers
+                        continue
+                    else:
+                        break
+                try:
+                    value = await value
+                    if isinstance(value, QueueEmpty):
+                        continue
+                    try:
+                        url, ret = value
+                        yield ret
+                        if isinstance(ret, Crawler.CrawlError):
+                            continue
+                        self._crawler.enqueue(new_urls := ret[2], ignore_queued=True)
+                    except:
+                        url = value[0]
+                        self._crawler.reset((url,))
+                        self._crawler.enqueue((url,), before=True)
+                        raise
+                finally:
+                    self._queue.task_done()
+
+                if new_urls:
+                    # new URLs available
+                    self._awake.set()
+                    self._awake.clear()
+                    await sleep(0)  # yield to crawlers
+        finally:
+            # cleanup eagerly crawled URLs
+            self.stop()
+            reset_urls = tuple(
+                item[0]
+                for item in await gather(
+                    *iter_queue(self._queue), return_exceptions=True
+                )
+                if isinstance(item, tuple)
+            )
+            self._crawler.reset(reset_urls)
+            self._crawler.enqueue(reset_urls, before=True)

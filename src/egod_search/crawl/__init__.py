@@ -1,12 +1,13 @@
 # -*- coding: UTF-8 -*-
+from functools import partial
 from aiohttp import ClientResponse, ClientSession
-from asyncio import Lock, QueueEmpty
+from asyncio import QueueEmpty
 from bs4 import BeautifulSoup, SoupStrainer, Tag
-from types import EllipsisType, TracebackType
+from types import TracebackType
 from typing import (
     AbstractSet,
     Collection,
-    MutableMapping,
+    MutableSequence,
     MutableSet,
     Self,
     Sequence,
@@ -22,7 +23,6 @@ class Crawler:
     Crawler that supports HTTP and HTTPS.
     """
 
-    __slots__ = ("_lock", "_queue", "_session", "_visited")
     Result = tuple[ClientResponse, str | None, Sequence[URL]]
     """
     Crawl result type.
@@ -42,9 +42,9 @@ class Crawler:
     Supported URL schemes.
     """
 
-    class URLAlreadyVisited(ValueError):
+    class AlreadyQueued(ValueError):
         """
-        Exception for enqueueing an already visited URL.
+        Exception for enqueueing an already queued URL.
         """
 
         __slots__ = ()
@@ -56,13 +56,14 @@ class Crawler:
 
         __slots__ = ()
 
+    __slots__ = ("_queue", "_queued", "_session")
+
     def __init__(self) -> None:
         """
         Create a crawler.
         """
-        self._lock = Lock()
-        self._queue: MutableMapping[URL, EllipsisType] = {}
-        self._visited: MutableSet[URL] = set()
+        self._queue: MutableSequence[URL] = []
+        self._queued: MutableSet[URL] = set()
 
         self._session = ClientSession()
 
@@ -90,51 +91,47 @@ class Crawler:
         """
         await self._session.close()
 
-    async def enqueue(self, url: URL, *, ignore_visited: bool = False) -> None:
-        """
-        Enqueue a URL to be crawled.
-
-        Raises `ValueError` if the URL is invalid. Raises `URLAlreadyVisited` if the URL has already been visited.
-        """
-        if url.scheme not in self.SUPPORTED_SCHEMES:
-            raise ValueError(f"URL with invalid scheme: {url}")
-        async with self._lock:
-            if url in self._visited:
-                if ignore_visited:
-                    return
-                raise self.URLAlreadyVisited(url)
-            self._queue[url] = ...
-
-    async def enqueue_many(
-        self, urls: Collection[URL], *, ignore_visited: bool = False
+    def enqueue(
+        self,
+        urls: Collection[URL],
+        *,
+        before: bool = False,
+        ignore_queued: bool = False,
     ) -> None:
         """
-        Enqueue multiple URLs to be crawled. See `enqueue`.
+        Enqueue URLs to be crawled.
+
+        Raises `ValueError` if the URL is invalid. Raises `URLAlreadyQueued` if the URL has already been visited.
         """
         if unsupported := tuple(
             url for url in urls if url.scheme not in self.SUPPORTED_SCHEMES
         ):
             raise ValueError(f"URL(s) with invalid scheme: {unsupported}")
-        async with self._lock:
-            if visited := self._visited & frozenset(urls):
-                if not ignore_visited:
-                    raise self.URLAlreadyVisited(*visited)
-            self._queue.update((url, ...) for url in urls if url not in visited)
+        insert = partial(self._queue.insert, 0) if before else self._queue.append
+        if visited := self._queued & (urls_set := frozenset(urls)):
+            if not ignore_queued:
+                raise self.AlreadyQueued(*visited)
+        self._queued |= urls_set
+        for url in reversed(tuple(urls)) if before else urls:
+            if url not in visited:
+                insert(url)
 
-    async def dequeue(self) -> URL:
+    def reset(self, urls: Collection[URL]) -> None:
         """
-        Dequeue a queued URL for crawling and mark it as visited.
+        Mark URLs as unqueued.
+        """
+        self._queued -= frozenset(urls)
+
+    def dequeue(self) -> URL:
+        """
+        Dequeue a queued URL for crawling.
 
         Raises `QueueEmpty` if there are no queued URLs.
         """
-        async with self._lock:
-            try:
-                url = next(iter(self._queue))
-            except StopIteration:
-                raise QueueEmpty("No queued URLs")
-            self._visited.add(url)
-            del self._queue[url]
-        return url
+        try:
+            return self._queue.pop(0)
+        except IndexError:
+            raise QueueEmpty("No queued URLs")
 
     async def crawl(self, url: URL) -> Result:
         """
@@ -219,8 +216,8 @@ class Crawler:
         return tuple(self._queue)
 
     @property
-    def visited(self) -> AbstractSet[URL]:
+    def queued(self) -> AbstractSet[URL]:
         """
-        Already visited URLs.
+        Already queued URLs.
         """
-        return frozenset(self._visited)
+        return frozenset(self._queued)
