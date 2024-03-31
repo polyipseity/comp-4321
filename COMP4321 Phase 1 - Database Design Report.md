@@ -5,6 +5,7 @@
 ## General Principles
 
 For precise communication, we would need consistent names. We used these two names consistently:
+
 * `rowid` indicates the integer ID of an item. It is the primary key of each table so cannot be null.
 * `content` is the item
 
@@ -52,6 +53,7 @@ For the equivalent of `ON UPDATE CASCADE`, when a `rowid` updates, we would repl
 For the equivalent of `ON DELETE RESTRICT`, when a `rowid` is about to be deleted, we check for any references to this `rowid` inside the `links` column, and abort with error if found.
 
 When we insert or update `links` values, we:
+
 1. Check that it is valid JSON
 2. Check that all elements are integers
 3. Check that there are no duplicate values
