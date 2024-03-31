@@ -2,13 +2,13 @@
 from functools import cache, wraps
 from importlib.resources import files
 from itertools import islice, pairwise, tee
-from re import DOTALL, compile
+from nltk.tokenize import TreebankWordTokenizer  # type: ignore
 from typing import Iterator
 from unicodedata import normalize
 
 from .. import PACKAGE_NAME
 
-_WORD_REGEX = compile(r"\S+", flags=DOTALL)
+_WORD_TOKENIZER = TreebankWordTokenizer()
 
 STOP_WORDS = frozenset(
     word.casefold()
@@ -287,7 +287,7 @@ def split_words(text: str) -> Iterator[tuple[int, str]]:
     """
     Split text into a sequence of positions and words.
 
-    Splits on consecutive whitespaces and does not return empty strings.
+    It uses `TreebankWordTokenizer`. See its documentation for details.
     """
-    for match in _WORD_REGEX.finditer(text):
-        yield match.start(), match[0]
+    for start, end in _WORD_TOKENIZER.span_tokenize(text):
+        yield start, text[start:end]
