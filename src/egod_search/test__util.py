@@ -77,7 +77,7 @@ async def _concurrency_task() -> None:
 
 async def _concurrency_fail() -> None:
     await sleep(ConcurrencyTestCase.TASK_TIME)
-    raise RuntimeError()
+    raise ConcurrencyTestCase.Exception()
 
 
 async def _concurrency_append(
@@ -114,6 +114,9 @@ class ConcurrencyTestCase(AsyncTestCase):
     _MP_POOL_SLEEP_MULTIPLIER = 64
     _QUEUE_PRODUCER_COUNT = 1024
     __slots__ = ()
+
+    class Exception(Exception):
+        __slots__ = ()
 
     async def test_a_iter_queue(self) -> None:
         queue: Queue[None | EllipsisType]
@@ -214,17 +217,24 @@ class ConcurrencyTestCase(AsyncTestCase):
         ):
             self.assertTupleEqual(next(expected), output)
 
-    async def test_a_eagar_map3(self) -> None:
+    async def test_a_eager_map3(self) -> None:
         async for _ in a_eager_map(
             call, any_iter((_concurrency_task, _concurrency_fail)), concurrency=1
         ):
             break
 
-    async def test_a_eagar_map4(self) -> None:
-        with self.assertRaises(RuntimeError):
-            async for _ in a_eager_map(
-                call, any_iter((_concurrency_task, _concurrency_fail)), concurrency=1
-            ):
+    async def test_a_eager_map4(self) -> None:
+        with self.assertRaises(self.Exception):
+            try:
+                async for _ in a_eager_map(
+                    call,
+                    any_iter((_concurrency_task, _concurrency_fail)),
+                    concurrency=1,
+                ):
+                    pass
+            except* self.Exception as exc:
+                raise exc.exceptions[0]
+            except* BaseException:
                 pass
 
     async def test_a_pool_imap1_mp(self) -> None:
@@ -281,13 +291,18 @@ class ConcurrencyTestCase(AsyncTestCase):
                 break
 
     async def test_a_pool_imap4_mp(self) -> None:
-        with self.assertRaises(RuntimeError):
+        with self.assertRaises(self.Exception):
             with Pool(1, initializer=_concurrency_pool_init) as pool:
-                async for _ in a_pool_imap(
-                    pool,
-                    _concurrency_pool_run,
-                    any_iter((_concurrency_task, _concurrency_fail)),
-                ):
+                try:
+                    async for _ in a_pool_imap(
+                        pool,
+                        _concurrency_pool_run,
+                        any_iter((_concurrency_task, _concurrency_fail)),
+                    ):
+                        pass
+                except* self.Exception as exc:
+                    raise exc.exceptions[0]
+                except* BaseException:
                     pass
 
 

@@ -1,8 +1,11 @@
 # -*- coding: UTF-8 -*-
 from asyncio import (
     BoundedSemaphore,
+    Future,
+    InvalidStateError,
     Queue,
     QueueEmpty,
+    TaskGroup,
     create_task,
     gather,
     get_running_loop,
@@ -126,7 +129,10 @@ async def a_eager_map(
     """
     Async map that eagerly evaluates. `func` is run in the same thread.
 
-    Exceptions are only propagated when the items with exception are accessed.
+    Exceptions are propagated in an exception group when the items with
+    exceptions are accessed.
+    The group of exceptions may include exceptions that occur during eager
+    submission of tasks.
     """
     queue = Queue[Awaitable[_U] | EllipsisType](max_size)
 
@@ -140,21 +146,26 @@ async def a_eager_map(
 
             async for item in iterable:
                 async with concurrency_limiter:
-                    await queue.put(create_task(execute(item)))
+                    task = create_task(execute(item))
+                    try:
+                        await queue.put(task)
+                    except:
+                        task.cancel()
+                        raise
         finally:
             await queue.put(...)
 
-    submit_task = create_task(submit())
     try:
-        async for item in a_iter_queue(queue):
-            if item is ...:
-                break
-            yield await item
+        async with TaskGroup() as tg:
+            submit_task = tg.create_task(submit())
+            async for item in a_iter_queue(queue):
+                if item is ...:
+                    break
+                yield await item
+        submit_task.result()
     finally:
         # stop and cleanup unconsumed awaitables
-        submit_task.cancel()
         await gather(
-            submit_task,
             *(awaitable for awaitable in iter_queue(queue) if awaitable is not ...),
             return_exceptions=True,
         )
@@ -182,38 +193,57 @@ async def a_pool_imap(
     """
     `Pool.imap` for async.
 
-    Exceptions are only propagated when the items with exception are accessed.
+    Exceptions are propagated in an exception group when the items with
+    exceptions are accessed.
+    The group of exceptions may include exceptions that occur during eager
+    submission of tasks.
     """
     queue = Queue[Awaitable[_U] | EllipsisType](max_size)
 
     async def submit():
         try:
+
+            def callback(future: Future[_T], arg: _T):
+                try:
+                    future.set_result(arg)
+                except InvalidStateError:
+                    future.cancel()
+
+            def error_callback(future: Future[object], arg: BaseException):
+                try:
+                    future.set_exception(arg)
+                except InvalidStateError:
+                    future.cancel()
+
             loop = get_running_loop()
             async for item in iterable:
-                future = loop.create_future()
-                pool.apply_async(
-                    func,
-                    (item,),
-                    callback=partial(loop.call_soon_threadsafe, future.set_result),
-                    error_callback=partial(
-                        loop.call_soon_threadsafe, future.set_exception
-                    ),
-                )
-                await queue.put(future)
+                await queue.put(future := loop.create_future())
+                try:
+                    pool.apply_async(
+                        func,
+                        (item,),
+                        callback=partial(loop.call_soon_threadsafe, callback, future),  # type: ignore
+                        error_callback=partial(
+                            loop.call_soon_threadsafe, error_callback, future  # type: ignore
+                        ),
+                    )
+                except:
+                    future.cancel()
+                    raise
         finally:
             await queue.put(...)
 
-    submit_task = create_task(submit())
     try:
-        async for item in a_iter_queue(queue):
-            if item is ...:
-                break
-            yield await item
+        async with TaskGroup() as tg:
+            submit_task = tg.create_task(submit())
+            async for item in a_iter_queue(queue):
+                if item is ...:
+                    break
+                yield await item
+        submit_task.result()
     finally:
         # stop and cleanup unconsumed awaitables
-        submit_task.cancel()
         await gather(
-            submit_task,
             *(awaitable for awaitable in iter_queue(queue) if awaitable is not ...),
             return_exceptions=True,
         )
