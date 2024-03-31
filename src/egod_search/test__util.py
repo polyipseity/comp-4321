@@ -13,8 +13,6 @@ from asyncio import (
 from atexit import register
 from contextlib import aclosing, closing
 from functools import partial
-from multiprocessing import Value
-from multiprocessing.pool import Pool
 from multiprocessing.sharedctypes import Synchronized
 from types import EllipsisType
 from typing import (
@@ -36,6 +34,7 @@ from unittest import TestCase, main
 from . import PACKAGE_NAME
 from ._util import (
     AsyncTestCase,
+    DEFAULT_MULTIPROCESSING_CONTEXT,
     a_eager_map,
     a_fetch_one,
     a_fetch_value,
@@ -188,7 +187,7 @@ class ConcurrencyTestCase(AsyncTestCase):
         await wait_for(consumer_no_break(), self.TASK_TIME)
 
     async def test_a_eager_map1(self) -> None:
-        shared = Value("q", 0)
+        shared = DEFAULT_MULTIPROCESSING_CONTEXT.Value("q", 0)
         expected = iter(((0, 1), (1, 2)))
         async for output in a_eager_map(
             call,
@@ -203,7 +202,7 @@ class ConcurrencyTestCase(AsyncTestCase):
             self.assertTupleEqual(next(expected), output)
 
     async def test_a_eager_map2(self) -> None:
-        shared = Value("q", 0)
+        shared = DEFAULT_MULTIPROCESSING_CONTEXT.Value("q", 0)
         expected = iter(((1, 2), (0, 1)))
         async for output in a_eager_map(
             call,
@@ -238,9 +237,11 @@ class ConcurrencyTestCase(AsyncTestCase):
                 pass
 
     async def test_a_pool_imap1_mp(self) -> None:
-        shared = Value("q", 0)
+        shared = DEFAULT_MULTIPROCESSING_CONTEXT.Value("q", 0)
         expected = iter(((0, 1), (1, 2)))
-        with Pool(1, initializer=_concurrency_pool_init, initargs=(shared,)) as pool:
+        with DEFAULT_MULTIPROCESSING_CONTEXT.Pool(
+            1, initializer=_concurrency_pool_init, initargs=(shared,)
+        ) as pool:
             async for output in a_pool_imap(
                 pool,
                 _concurrency_pool_run,
@@ -260,9 +261,11 @@ class ConcurrencyTestCase(AsyncTestCase):
                 self.assertTupleEqual(next(expected), output)
 
     async def test_a_pool_imap2_mp(self) -> None:
-        shared = Value("q", 0)
+        shared = DEFAULT_MULTIPROCESSING_CONTEXT.Value("q", 0)
         expected = iter(((1, 2), (0, 1)))
-        with Pool(2, initializer=_concurrency_pool_init, initargs=(shared,)) as pool:
+        with DEFAULT_MULTIPROCESSING_CONTEXT.Pool(
+            2, initializer=_concurrency_pool_init, initargs=(shared,)
+        ) as pool:
             async for output in a_pool_imap(
                 pool,
                 _concurrency_pool_run,
@@ -282,7 +285,9 @@ class ConcurrencyTestCase(AsyncTestCase):
                 self.assertTupleEqual(next(expected), output)
 
     async def test_a_pool_imap3_mp(self) -> None:
-        with Pool(1, initializer=_concurrency_pool_init) as pool:
+        with DEFAULT_MULTIPROCESSING_CONTEXT.Pool(
+            1, initializer=_concurrency_pool_init
+        ) as pool:
             async for _ in a_pool_imap(
                 pool,
                 _concurrency_pool_run,
@@ -292,7 +297,9 @@ class ConcurrencyTestCase(AsyncTestCase):
 
     async def test_a_pool_imap4_mp(self) -> None:
         with self.assertRaises(self.Exception):
-            with Pool(1, initializer=_concurrency_pool_init) as pool:
+            with DEFAULT_MULTIPROCESSING_CONTEXT.Pool(
+                1, initializer=_concurrency_pool_init
+            ) as pool:
                 try:
                     async for _ in a_pool_imap(
                         pool,

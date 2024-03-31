@@ -1,13 +1,12 @@
 # -*- coding: UTF-8 -*-
 from asyncio import TaskGroup, gather, to_thread
 from importlib.resources import files
-from multiprocessing import Pool
 from os import cpu_count
 from unicodedata import normalize
 from unittest import TestCase, main
 
 from .. import PACKAGE_NAME
-from .._util import AsyncTestCase
+from .._util import AsyncTestCase, DEFAULT_MULTIPROCESSING_CONTEXT
 from .transform import default_transform, normalize_text_for_search, porter, split_words
 
 
@@ -347,7 +346,7 @@ class WordTestCase(AsyncTestCase):
         inputs = input.splitlines()
         actual_outputs = [""] * len(inputs)
 
-        with Pool(self._MP_POOL_CONCURRENCY) as pool:
+        with DEFAULT_MULTIPROCESSING_CONTEXT.Pool(self._MP_POOL_CONCURRENCY) as pool:
 
             def process():
                 for idx, actual_output in pool.imap_unordered(

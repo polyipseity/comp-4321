@@ -13,7 +13,9 @@ from asyncio import (
 from datetime import datetime
 from email.message import Message
 from functools import partial
+from multiprocessing import get_context
 from multiprocessing.pool import Pool
+from os import name
 from sqlite3 import Row
 from types import EllipsisType
 from unittest import IsolatedAsyncioTestCase
@@ -48,6 +50,13 @@ _HTTP_LAST_MODIFIED = {
     "Nov": "11",
     "Dec": "12",
 }
+
+DEFAULT_MULTIPROCESSING_CONTEXT = get_context("spawn" if name == "nt" else "fork")
+"""
+The default context for multiprocessing.
+
+See the info and warnings on <https://docs.python.org/3/library/multiprocessing.html#contexts-and-start-methods>.
+"""
 
 
 class SupportsRead(Protocol[_AnyStr_co]):

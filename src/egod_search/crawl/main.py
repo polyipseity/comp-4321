@@ -1,7 +1,6 @@
 # -*- coding: UTF-8 -*-
 from asyncio import Lock
 from logging import INFO, basicConfig, getLogger
-from multiprocessing.pool import Pool
 from aiohttp import ClientResponseError
 from aiosqlite import connect
 from anyio import Path
@@ -13,7 +12,7 @@ from typing import AsyncIterator, Callable, Collection
 from yarl import URL
 
 from .. import VERSION
-from .._util import a_eager_map, a_pool_imap
+from .._util import DEFAULT_MULTIPROCESSING_CONTEXT, a_eager_map, a_pool_imap
 from ..crawl import Crawler
 from ..crawl.concurrency import ConcurrentCrawler
 from ..database.output import summary_s
@@ -44,7 +43,7 @@ async def main(
 
     basicConfig(level=INFO)
     logger = getLogger(_PROGRAM)
-    with logging_redirect_tqdm(loggers=(logger,)) as a:
+    with logging_redirect_tqdm(loggers=(logger,)):
 
         if page_count is None:
             page_count = len(urls)
@@ -84,7 +83,9 @@ async def main(
                 return True
 
             with (
-                Pool(processes=index_concurrency) as index_pool,
+                DEFAULT_MULTIPROCESSING_CONTEXT.Pool(
+                    processes=index_concurrency
+                ) as index_pool,
                 tqdm(
                     total=page_count,
                     disable=not show_progress,
