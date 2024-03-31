@@ -41,6 +41,9 @@ jobs:
     - name: Build
       run: |
         egod-search-build
+    - name: Run
+      run: |
+        ./dist/egod-search --help
 
 on:
   pull_request:
