@@ -242,6 +242,9 @@ async def a_pool_imap(
                             loop.call_soon_threadsafe, error_callback, future  # type: ignore
                         ),
                     )
+                except ValueError:
+                    # the pool has stopped, which likely means the caller no longer needs more result, so discard error
+                    future.cancel()
                 except:
                     future.cancel()
                     raise
