@@ -100,11 +100,11 @@ class ConcurrentCrawler:
                     future.set_result((url, await self._crawler.crawl(url)))
                 except Crawler.CrawlError as exc:
                     future.set_result((url, exc))
-                except:
+                except BaseException:
                     self._crawler.reset((url,))
                     self._crawler.enqueue((url,), before=True)
                     raise
-            except:
+            except BaseException:
                 future.cancel()
                 raise
 
@@ -148,7 +148,7 @@ class ConcurrentCrawler:
                         if isinstance(ret, Crawler.CrawlError):
                             continue
                         self._crawler.enqueue(new_urls := ret[2], ignore_queued=True)
-                    except:
+                    except BaseException:
                         url = value[0]
                         self._crawler.reset((url,))
                         self._crawler.enqueue((url,), before=True)
