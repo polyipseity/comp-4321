@@ -4,12 +4,12 @@ from logging import INFO, basicConfig, getLogger
 from sys import executable, stderr, stdin, stdout
 from aiosqlite import Connection, connect
 from anyio import Path
-from asyncio.subprocess import create_subprocess_exec
 from argparse import ArgumentParser, Namespace
 from functools import wraps
 from typing import Callable
 from nicegui import app, ui
 from pathlib import Path as SyncPath
+from subprocess import run
 
 from egod_search import VERSION
 
@@ -97,15 +97,15 @@ def parser(parent: Callable[..., ArgumentParser] | None = None) -> ArgumentParse
             )
         )
         exit(
-            await (
-                await create_subprocess_exec(
+            run(  # cannot use async, otherwise reload does not work
+                (
                     executable,
                     Path(__file__).parent / "main.py",
-                    stderr=stderr,
-                    stdin=stdin,
-                    stdout=stdout,
-                )
-            ).wait()
+                ),
+                stderr=stderr,
+                stdin=stdin,
+                stdout=stdout,
+            ).returncode
         )
 
     parser.set_defaults(invoke=invoke)
