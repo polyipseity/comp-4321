@@ -22,6 +22,7 @@ from typing import (
     Callable,
     Generator,
     Generic,
+    NoReturn,
     TypeVar,
 )
 from asyncstdlib import any_iter
@@ -74,7 +75,7 @@ async def _concurrency_task() -> None:
     await sleep(ConcurrencyTestCase.TASK_TIME)
 
 
-async def _concurrency_fail() -> None:
+async def _concurrency_fail() -> NoReturn:
     await sleep(ConcurrencyTestCase.TASK_TIME)
     raise ConcurrencyTestCase.Exception()
 
