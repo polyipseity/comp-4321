@@ -1,7 +1,7 @@
 # -*- coding: UTF-8 -*-
 from json import dumps, load
 from logging import INFO, basicConfig, getLogger
-from sys import executable, stderr, stdin, stdout
+from sys import executable, exit, stderr, stdin, stdout
 from aiosqlite import Connection, connect
 from anyio import Path
 from argparse import ArgumentParser, Namespace
