@@ -51,7 +51,7 @@ on:
       - main
   push:
     branches:
-      - "main"
+      - main
   workflow_dispatch:
 
 permissions: {}
