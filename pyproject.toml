@@ -28,12 +28,12 @@ classifiers = [
 ]
 dependencies = [
 	"aiohttp>=3.9.0", # async request
-	"aiosqlite>=0.20.0", # async SQLite database
 	"anyio>=4.3.0", # async file
 	"asyncstdlib>=3.12.0", # async utilities
 	"beautifulsoup4>=4.12.0", # parse HTML
 	"nicegui>=1.4.0", # web interface
 	"nltk>=3.8.0", # natural language processing, in particular for splitting words
+	"tortoise-orm>=0.20.0", # async SQLite database, ORM-style
 	"tqdm>=4.66.0", # progress bar
 	"yarl>=1.9.0", # URL utilities
 ]

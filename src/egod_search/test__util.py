@@ -7,7 +7,6 @@ from asyncio import (
     new_event_loop,
     set_event_loop,
     sleep,
-    to_thread,
     wait_for,
 )
 from atexit import register
@@ -27,18 +26,13 @@ from typing import (
 )
 from asyncstdlib import any_iter
 from operator import call
-from aiosqlite import connect
 from datetime import datetime, timezone
-from importlib.resources import files
 from unittest import TestCase, main
 
-from . import PACKAGE_NAME
 from ._util import (
     AsyncTestCase,
     DEFAULT_MULTIPROCESSING_CONTEXT,
     a_eager_map,
-    a_fetch_one,
-    a_fetch_value,
     a_iter_queue,
     a_pool_imap,
     iter_queue,
@@ -565,75 +559,6 @@ boundary=text""": (
         ):
             with self.assertRaises(ValueError, msg=input):
                 parse_http_datetime(input)
-
-
-class SQLiteTestCase(AsyncTestCase):
-    __slots__ = ("_conn",)
-
-    # @override
-    async def asyncSetUp(self) -> None:
-        ret = await super().asyncSetUp()
-        self._conn = await connect("")
-        self.addAsyncCleanup(self._conn.close)
-        await self._conn.executescript(
-            await to_thread((files(PACKAGE_NAME) / "res/Chinook_Sqlite.sql").read_text)
-        )
-        return ret
-
-    async def test_a_fetch_one(self) -> None:
-        self.assertSequenceEqual(
-            (3503, "Koyaanisqatsi", "Philip Glass"),
-            await a_fetch_one(
-                self._conn,
-                """
-SELECT TrackId, Name, Composer FROM main.Track
-ORDER BY TrackId DESC
-LIMIT 50""",
-            ),  # type: ignore
-        )
-        self.assertEqual(
-            None,
-            await a_fetch_one(
-                self._conn,
-                """
-SELECT TrackId, Name, Composer FROM main.Track
-ORDER BY TrackId DESC
-LIMIT 0""",
-            ),
-        )
-
-    async def test_a_fetch_value(self) -> None:
-        self.assertEqual(
-            3503,
-            await a_fetch_value(
-                self._conn,
-                """
-SELECT TrackId, Name, Composer FROM main.Track
-ORDER BY TrackId DESC
-LIMIT 50""",
-            ),
-        )
-        self.assertEqual(
-            None,
-            await a_fetch_value(
-                self._conn,
-                """
-SELECT TrackId, Name, Composer FROM main.Track
-ORDER BY TrackId DESC
-LIMIT 0""",
-            ),
-        )
-        self.assertEqual(
-            ...,
-            await a_fetch_value(
-                self._conn,
-                """
-SELECT TrackId, Name, Composer FROM main.Track
-ORDER BY TrackId DESC
-LIMIT 0""",
-                default=...,
-            ),
-        )
 
 
 if __name__ == "__main__":

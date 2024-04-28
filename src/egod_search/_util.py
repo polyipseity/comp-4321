@@ -10,17 +10,17 @@ from asyncio import (
     gather,
     get_running_loop,
 )
+from contextlib import asynccontextmanager
 from datetime import datetime
 from email.message import Message
-from functools import partial
+from functools import partial, wraps
 from multiprocessing import get_context
 from multiprocessing.pool import Pool
 from os import name
-from sqlite3 import Row
 from types import EllipsisType
 from unittest import IsolatedAsyncioTestCase
-from aiosqlite import Connection
 from typing import (
+    Any,
     AsyncIterable,
     AsyncIterator,
     Awaitable,
@@ -30,6 +30,8 @@ from typing import (
     Protocol,
     TypeVar,
 )
+
+from tortoise import Tortoise
 
 _AnyStr_co = TypeVar("_AnyStr_co", str, bytes, covariant=True)
 _AnyStr_contra = TypeVar("_AnyStr_contra", str, bytes, contravariant=True)
@@ -111,21 +113,15 @@ class AsyncTestCase(IsolatedAsyncioTestCase):
         return ret
 
 
-async def a_fetch_one(conn: Connection, *args: object) -> Row | None:
-    """
-    Return the first row of query result if exists or `None`.
-    """
-    return await (await conn.execute(*args)).fetchone()
-
-
-async def a_fetch_value(
-    conn: Connection, *args: object, default: object = None
-) -> object:
-    """
-    Return the first value of first row of query result if exists or `None`.
-    """
-    ret = await a_fetch_one(conn, *args)
-    return default if ret is None else ret[0]
+@wraps(Tortoise.init)  # type: ignore
+@asynccontextmanager
+async def Tortoise_context(*args: Any, **kwargs: Any) -> AsyncIterator[None]:
+    await Tortoise.init(*args, **kwargs)  # type: ignore
+    try:
+        await Tortoise.generate_schemas()
+        yield
+    finally:
+        await Tortoise.close_connections()
 
 
 async def a_eager_map(

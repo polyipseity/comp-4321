@@ -1,21 +1,20 @@
 # -*- coding: UTF-8 -*-
 from collections import defaultdict
 from dataclasses import dataclass
-from functools import partial
+from datetime import datetime, timezone
 from time import time
-from typing import Collection, Mapping, MutableMapping, MutableSequence
+from typing import Collection, Mapping, MutableSequence, Sequence
 from bs4 import BeautifulSoup, Tag
 from yarl import URL
 
 from .transform import default_transform
 from .._util import parse_http_datetime
-from ..database.scheme import Scheme
 
 
 @dataclass(frozen=True, kw_only=True, slots=True)
 class UnindexedPage:
     """
-    Page metadata for indexing.
+    Unindexed page metadata.
     """
 
     url: URL
@@ -36,7 +35,51 @@ class UnindexedPage:
     """
 
 
-def index_page(page: UnindexedPage):
+@dataclass(frozen=True, kw_only=True, slots=True)
+class IndexedPage:
+    """
+    Indexed Page metadata.
+    """
+
+    url: URL
+    """
+    URL of the page.
+    """
+    mod_time: datetime
+    """
+    Last modification of the page.
+    """
+    text: str
+    """
+    Raw content of the page, including markup.
+    """
+    plaintext: str
+    """
+    Plaintext of the page, excluding markup.
+    """
+    size: int
+    """
+    Size of the page.
+    """
+    title: str
+    """
+    Title of the page.
+    """
+    links: Collection[URL]
+    """
+    Outgoing links from this page.
+    """
+    word_occurrences: Mapping[str, Sequence[int]]
+    """
+    Word occurrences in the plaintext.
+    """
+    word_occurrences_title: Mapping[str, Sequence[int]]
+    """
+    Word occurrences in the title.
+    """
+
+
+def index_page(page: UnindexedPage) -> IndexedPage:
     """
     Index a page from its metadata, content, and links.
     """
@@ -72,22 +115,21 @@ def index_page(page: UnindexedPage):
             plaintext
         )  # number of characters in the plaintext, project requirement
 
-    word_occurrences = defaultdict[
-        str,
-        MutableMapping[Scheme.Page.WordOccurrenceType, MutableSequence[int]],
-    ](partial(defaultdict, list))
-    for pos, word in default_transform(title):
-        word_occurrences[word][Scheme.Page.WordOccurrenceType.TITLE].append(pos)
+    word_occurrences = defaultdict[str, MutableSequence[int]](list)
+    word_occurrences_title = defaultdict[str, MutableSequence[int]](list)
     for pos, word in default_transform(plaintext):
-        word_occurrences[word][Scheme.Page.WordOccurrenceType.PLAINTEXT].append(pos)
+        word_occurrences[word].append(pos)
+    for pos, word in default_transform(title):
+        word_occurrences_title[word].append(pos)
 
-    return Scheme.Page(
+    return IndexedPage(
         url=url,
-        mod_time=mod_time,
+        mod_time=datetime.fromtimestamp(mod_time, timezone.utc),
         size=size,
         text=page.content,
         plaintext=plaintext,
         title=title,
         links=page.links,
         word_occurrences=word_occurrences,
+        word_occurrences_title=word_occurrences_title,
     )

@@ -1,8 +1,8 @@
 # -*- coding: UTF-8 -*-
 from json import dumps, load
 from logging import INFO, basicConfig, getLogger
+from os import PathLike
 from sys import executable, exit, stderr, stdin, stdout
-from aiosqlite import Connection, connect
 from anyio import Path
 from argparse import ArgumentParser, Namespace
 from functools import wraps
@@ -10,15 +10,17 @@ from typing import Callable
 from nicegui import app, ui
 from pathlib import Path as SyncPath
 from subprocess import run
+from tortoise import Tortoise
 
 from egod_search import VERSION
+from egod_search.database.models import APP_NAME, MODELS
 
 _CONFIGURATION_PATH = Path("web_args.json")
 _PROGRAM = __package__ or __name__
 _LOGGER = getLogger(_PROGRAM)
 
 
-def main(*, database_path: Path) -> None:
+def main(*, database_path: PathLike[str]) -> None:
     """
     Main program.
     """
@@ -29,14 +31,27 @@ def main(*, database_path: Path) -> None:
         })}"""
     )
 
-    db: Connection
-
     async def on_startup():
-        nonlocal db
-        db = await connect(database_path.__fspath__())
+        await Tortoise.init(  # type: ignore
+            {
+                "apps": {
+                    APP_NAME: {
+                        "default_connection": "default",
+                        "models": ("egod_search.database.models",),
+                    }
+                },
+                "connections": {
+                    "default": f"sqlite://{database_path.__fspath__()}",
+                },
+                "routers": (),
+                "timezone": "UTC",
+                "use_tz": True,
+            }
+        )
+        await Tortoise.generate_schemas()
 
     async def on_shutdown():
-        await db.close()
+        await Tortoise.close_connections()
 
     @ui.page("/other_page")
     async def other_page():  # type: ignore
@@ -49,12 +64,12 @@ def main(*, database_path: Path) -> None:
     @ui.page("/")
     async def index():  # type: ignore
         ui.label("Welcome to home")
-        async with db.cursor() as cursor:
-            async with db.execute(
-                "SELECT rowid FROM main.urls WHERE content = 'https://www.cse.ust.hk/~kwtleung/COMP4321/testpage.htm'"
-            ) as cursor:
-                rows = await cursor.fetchall()
-                ui.label(str(rows))
+        async for page in MODELS.Page.filter(
+            url=await MODELS.URL.get(
+                content="https://www.cse.ust.hk/~kwtleung/COMP4321/testpage.htm"
+            )
+        ):
+            ui.label(page.text)
 
     app.on_startup(on_startup)  # type: ignore
     app.on_shutdown(on_shutdown)  # type: ignore
@@ -116,5 +131,5 @@ if __name__ in {"__main__", "__mp_main__"}:
     with SyncPath(_CONFIGURATION_PATH).open("rt") as config_file:
         config = load(config_file)
     main(
-        database_path=Path(config["database_path"]),
+        database_path=SyncPath(config["database_path"]).resolve(),
     )
