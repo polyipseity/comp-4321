@@ -7,7 +7,6 @@ from tortoise.fields import (
     BigIntField,
     CharField,
     DatetimeField,
-    Field,
     ForeignKeyField,
     ForeignKeyNullableRelation,
     ForeignKeyRelation,
@@ -22,12 +21,12 @@ from tortoise.validators import (
     MinValueValidator,
 )
 
-from .. import PACKAGE_NAME
+from .. import NAME
 from ..index import IndexedPage
 
 _TExtendsModel = TypeVar("_TExtendsModel", bound=Model)
 
-APP_NAME = PACKAGE_NAME
+APP_NAME = NAME
 """
 App name of the models.
 """
