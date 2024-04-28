@@ -40,7 +40,7 @@ dependencies = [
 description = "HKUST COMP 4321 sources dropped from heaven by E God himself!"
 dynamic = ["version",]
 keywords = []
-license = {file = "LICENSE.txt"}
+license = {file = "LICENSE.md"}
 name = "egod-search" # synchronize with `__init__.py`
 readme = "README.md"
 requires-python = ">=3.11.0"
