@@ -43,8 +43,6 @@ class URL(Model):
         """
 
         abstract = True
-        app = APP_NAME
-        table = "URL"
 
     id = BigIntField(generated=True, index=True, pk=True, unique=True)
     """
@@ -82,8 +80,6 @@ class Word(Model):
         """
 
         abstract = True
-        app = APP_NAME
-        table = "word"
 
     id = BigIntField(generated=True, index=True, pk=True, unique=True)
     """
@@ -109,8 +105,6 @@ class Page(Model):
         """
 
         abstract = True
-        app = APP_NAME
-        table = "page"
 
     url: ForeignKeyRelation[URL] = ForeignKeyField(
         f"{APP_NAME}.{URL.__name__}", index=True, on_delete=RESTRICT, unique=True
@@ -239,8 +233,6 @@ class WordOccurrence(Model):
         """
 
         abstract = True
-        app = APP_NAME
-        table = "word_occurrence"
         indexes = (("page", "word"),)
         unique_together = (("page", "word"),)
 
@@ -280,8 +272,6 @@ class WordOccurrenceTitle(WordOccurrence):
         """
 
         abstract = True
-        app = APP_NAME
-        table = "word_occurrence_title"
 
 
 class Models(NamedTuple):
@@ -299,7 +289,7 @@ def new_model(model: type[_TExtendsModel]) -> type[_TExtendsModel]:
     return cast(type[_TExtendsModel], type(model.__name__, (model,), {}))
 
 
-def new_models(app_name: str = "models") -> Models:
+def new_models() -> Models:
     """
     Create new copies of the models.
     """
