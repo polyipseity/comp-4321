@@ -11,6 +11,9 @@ from nicegui import app, ui
 from pathlib import Path as SyncPath
 from subprocess import run
 from tortoise import Tortoise
+from tortoise.functions import Sum, Count
+
+from math import log2
 
 from egod_search import VERSION
 from egod_search.database.models import APP_NAME, MODELS
@@ -70,6 +73,109 @@ def main(*, database_path: PathLike[str]) -> None:
             )
         ):
             ui.label(page.text)
+
+    @ui.page("/search")
+    async def search_page():
+        input_field = ui.input("List of keywords, by comma")
+        output_field = ui.label("Output shows here")
+
+        async def submission_onclick():
+            word_occurrences = await MODELS.WordOccurrence.all().prefetch_related(
+                "page"
+            )
+
+            """for word_occurrence in word_occurrences:
+                page = word_occurrence['page']
+                print(page)"""
+            page_ids = list(set(x.page.id for x in word_occurrences))
+
+            output_field.text = ""
+
+            for stem_raw in input_field.value.lower().split(","):
+                stem = stem_raw.strip()
+                output_field.text += stem
+                output_field.text += ": "
+
+                try:
+                    mget = await MODELS.Word.get(content=stem)
+                except:
+                    output_field.text += "Not In DB"
+                    continue
+
+                each_page_tf = {}
+
+                res = (
+                    await MODELS.WordOccurrence.filter(word=mget)
+                    .annotate(sum=Sum("frequency"))
+                    .group_by("page__id")
+                    .values("page__id", "sum")
+                )
+                for x in res:
+                    each_page_tf[x["page__id"]] = x["sum"]
+
+                print(each_page_tf)
+                ## max(tf) norm
+                page_ids_in_dict = list(each_page_tf.keys())
+
+                for page_id_to_norm in page_ids_in_dict:
+                    print("Begin norm")
+                    print(page_id_to_norm, type(page_id_to_norm))
+                    try:
+                        """res_test = await MODELS.WordOccurrence.filter(
+                            page__id=page_id_to_norm
+                        ).values("page__url__content", "word__content", "word__id", "frequency")
+                        for elem_lots in res_test:
+                            print(elem_lots)"""
+                        res_norm = (
+                            await MODELS.WordOccurrence.filter(page__id=page_id_to_norm)
+                            # filter(
+                            #    page=MODELS.Page.get(id=page_id_to_norm)
+                            # )
+                            .annotate(sum=Sum("frequency"))
+                            .group_by("word__id")
+                            .order_by(
+                                "-frequency"  # Supports ordering by related models too.
+                                # A ‘-’ before the name will result in descending sort order, default is ascending.
+                            )
+                            .limit(1)
+                            .values("frequency")
+                        )
+                    except Exception as e:
+                        import traceback
+
+                        print(traceback.format_exc())
+
+                    print(res_norm)
+                    each_page_tf[page_id_to_norm] /= res_norm[0]["frequency"]
+                    # for x in res:
+                print("After norm")
+                print(each_page_tf)
+
+                """res2 = (
+                    await MODELS.WordOccurrence.filter(
+                        word=await MODELS.Word.get(content=input_field.value)
+                    )
+                    .distinct()
+                    .values("page__id")
+                )
+
+                word_idf = len(res2)"""
+
+                word_idf = log2(len(page_ids) / len(each_page_tf))
+
+                # print(res2)
+
+                tfxidf = {k: v * word_idf for k, v in each_page_tf.items()}
+
+                print(tfxidf)
+
+                output_field.text += "page_tf: "
+                output_field.text += str(each_page_tf)
+                output_field.text += "word_idf: "
+                output_field.text += str(word_idf)
+                output_field.text += "\n"
+
+        submit_btn = ui.button("Submit", on_click=submission_onclick)
 
     app.on_startup(on_startup)  # type: ignore
     app.on_shutdown(on_shutdown)  # type: ignore
