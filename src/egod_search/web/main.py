@@ -22,6 +22,21 @@ _CONFIGURATION_PATH = Path("web_args.json")
 _PROGRAM = __package__ or __name__
 _LOGGER = getLogger(_PROGRAM)
 
+import math
+
+def cosine_distance(list1, list2):
+    # Calculate dot product
+    dot_product = sum(x * y for x, y in zip(list1, list2))
+
+    # Calculate magnitudes
+    magnitude_list1 = math.sqrt(sum(x**2 for x in list1))
+    magnitude_list2 = math.sqrt(sum(x**2 for x in list2))
+
+    # Calculate cosine distance
+    cosine_distance = 1 - (dot_product / (magnitude_list1 * magnitude_list2))
+
+    return cosine_distance
+
 
 def main(*, database_path: PathLike[str]) -> None:
     """
@@ -77,29 +92,96 @@ def main(*, database_path: PathLike[str]) -> None:
     @ui.page("/search")
     async def search_page():
         input_field = ui.input("List of keywords, by comma")
-        output_field = ui.label("Output shows here")
+
+        indexed_how_many_pages = ui.label()
+
+        @ui.refreshable
+        def show_stems_info(arr_of_dict = None):
+            if not arr_of_dict:
+                return
+            
+
+            with ui.dialog() as dialog, ui.card():
+                with ui.carousel(animated=True, arrows=True, navigation=True).props("control-color=black"):
+                    for dict_info in arr_of_dict:
+                        with ui.carousel_slide():
+                            ui.label(f"For stem word {dict_info['stem']}:")
+                            if dict_info.get("notfound", False):
+                                ui.label("This stem word is not found!")
+                                continue
+                            ui.label(f"Document Frequency (DF): {dict_info['df']}")
+                            ui.label(f"Inverse Document Frequency (IDF): {dict_info['idf']}")
+                            columns = [
+                                {'name': 'id', 'label': 'Page ID', 'field': 'id', 'required': True, 'align': 'left'},
+                                {'name': 'tf', 'label': 'TF', 'field': 'tf', 'sortable': True},
+                                {'name': 'maxtf', 'label': 'max(TF)', 'field': 'maxtf', 'sortable': True},
+                                {'name': 'tfxidf_div_maxtf', 'label': 'TFxIDF/max(TF)', 'field': 'tfxidf_div_maxtf', 'sortable': True},
+                            ]
+                            rows = []
+                            for k,v in dict_info['tf_dict'].items():
+                                v['id'] = k
+                                rows.append(v)
+
+                            print(rows)
+
+                            ui.table(columns=columns, rows=rows, row_key='id')
+            ui.button('Show TFxIDF/max(TF) calculation info', on_click=dialog.open)
+            
+
+        show_stems_info()
+
+
+        @ui.refreshable
+        def show_vector_space_info(vector_space_dict = None):
+            if not vector_space_dict:
+                return
+            
+            columns = [
+                {'name': '__id', 'label': 'Page ID', 'field': '__id', 'required': True, 'align': 'left'},
+                
+            ]
+
+            for stemwords in list(vector_space_dict.values())[0].keys():
+                columns.append({'name': stemwords, 'label': stemwords, 'field': stemwords, 'sortable': True})
+
+            columns.append({'name': '__cos', 'label': 'Cosine Distance', 'field': '__cos', 'required': True, 'align': 'left'})
+
+            rows = []
+
+            for k,v in vector_space_dict.items():
+                v['__id'] = k
+                rows.append(v)
+            print("debug vector space table")
+            print(columns)
+            print(rows)
+            with ui.dialog() as dialog, ui.card():
+                ui.table(columns=columns, rows=rows, row_key='id')
+            ui.button('Show Vector Space info', on_click=dialog.open)
+            
+
+        show_vector_space_info()
 
         async def submission_onclick():
-            word_occurrences = await MODELS.WordOccurrence.all().prefetch_related(
-                "page"
-            )
+            output_to_call_function = []
 
-            """for word_occurrence in word_occurrences:
-                page = word_occurrence['page']
-                print(page)"""
-            page_ids = list(set(x.page.id for x in word_occurrences))
+            page_ids = [x['id'] for x in await MODELS.Page.all().values("id")]
 
-            output_field.text = ""
+            indexed_how_many_pages.text = f"Finding from {len(page_ids)} pages"
 
             for stem_raw in input_field.value.lower().split(","):
+
                 stem = stem_raw.strip()
-                output_field.text += stem
-                output_field.text += ": "
+
+                dict_info = {}
+                dict_info["stem"] = stem
+
+                dict_info["tf_dict"] = {}
 
                 try:
                     mget = await MODELS.Word.get(content=stem)
                 except:
-                    output_field.text += "Not In DB"
+                    dict_info["notfound"] = True
+                    output_to_call_function.append(dict_info)
                     continue
 
                 each_page_tf = {}
@@ -111,6 +193,7 @@ def main(*, database_path: PathLike[str]) -> None:
                     .values("page__id", "sum")
                 )
                 for x in res:
+                    dict_info["tf_dict"][x["page__id"]] = {"tf":x['sum']}
                     each_page_tf[x["page__id"]] = x["sum"]
 
                 print(each_page_tf)
@@ -121,18 +204,8 @@ def main(*, database_path: PathLike[str]) -> None:
                     print("Begin norm")
                     print(page_id_to_norm, type(page_id_to_norm))
                     try:
-                        """res_test = await MODELS.WordOccurrence.filter(
-                            page__id=page_id_to_norm
-                        ).values("page__url__content", "word__content", "word__id", "frequency")
-                        for elem_lots in res_test:
-                            print(elem_lots)"""
                         res_norm = (
                             await MODELS.WordOccurrence.filter(page__id=page_id_to_norm)
-                            # filter(
-                            #    page=MODELS.Page.get(id=page_id_to_norm)
-                            # )
-                            .annotate(sum=Sum("frequency"))
-                            .group_by("word__id")
                             .order_by(
                                 "-frequency"  # Supports ordering by related models too.
                                 # A ‘-’ before the name will result in descending sort order, default is ascending.
@@ -146,34 +219,45 @@ def main(*, database_path: PathLike[str]) -> None:
                         print(traceback.format_exc())
 
                     print(res_norm)
+                    dict_info["tf_dict"][page_id_to_norm]["maxtf"] = res_norm[0]["frequency"]
+                    dict_info["tf_dict"][page_id_to_norm]["tfnorm"] = dict_info["tf_dict"][page_id_to_norm]["tf"] # / res_norm[0]["frequency"]
                     each_page_tf[page_id_to_norm] /= res_norm[0]["frequency"]
                     # for x in res:
                 print("After norm")
                 print(each_page_tf)
 
-                """res2 = (
-                    await MODELS.WordOccurrence.filter(
-                        word=await MODELS.Word.get(content=input_field.value)
-                    )
-                    .distinct()
-                    .values("page__id")
-                )
-
-                word_idf = len(res2)"""
-
                 word_idf = log2(len(page_ids) / len(each_page_tf))
 
-                # print(res2)
+                dict_info["df"] = len(each_page_tf)
+
+                dict_info["idf"] = log2(len(page_ids) / len(each_page_tf))
 
                 tfxidf = {k: v * word_idf for k, v in each_page_tf.items()}
 
+                for page_id_calc_tfxidf in page_ids_in_dict:
+                    dict_info["tf_dict"][page_id_calc_tfxidf]["tfxidf_div_maxtf"] = dict_info["tf_dict"][page_id_calc_tfxidf]["tfnorm"] * dict_info["idf"]
+                    
                 print(tfxidf)
 
-                output_field.text += "page_tf: "
-                output_field.text += str(each_page_tf)
-                output_field.text += "word_idf: "
-                output_field.text += str(word_idf)
-                output_field.text += "\n"
+                output_to_call_function.append(dict_info)
+
+            all_pages_in_consideration = set()
+            for dict_info in output_to_call_function:
+                print(dict_info)
+                all_pages_in_consideration = all_pages_in_consideration.union(set(dict_info["tf_dict"].keys()))
+
+            vector_space_dict = {page:{dict_info['stem']:dict_info['tf_dict'].get(page, {}).get("tfxidf_div_maxtf", 0) for dict_info in output_to_call_function} for page in all_pages_in_consideration}
+
+            for page in all_pages_in_consideration:
+                vector = vector_space_dict[page].values()
+                unit_vector = [1 for _ in range(len(vector))]
+                vector_space_dict[page]["__cos"] = cosine_distance(vector, unit_vector)
+
+            print("VECTOR SPACE")
+            print(vector_space_dict)
+            # print(all_pages_in_consideration)
+            show_stems_info.refresh(output_to_call_function)
+            show_vector_space_info(vector_space_dict)
 
         submit_btn = ui.button("Submit", on_click=submission_onclick)
 
