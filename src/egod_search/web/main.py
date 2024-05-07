@@ -18,6 +18,8 @@ from math import log2
 from egod_search import VERSION
 from egod_search.database.models import APP_NAME, MODELS
 
+from egod_search.index.transform import porter
+
 _CONFIGURATION_PATH = Path("web_args.json")
 _PROGRAM = __package__ or __name__
 _LOGGER = getLogger(_PROGRAM)
@@ -25,6 +27,9 @@ _LOGGER = getLogger(_PROGRAM)
 import math
 
 def cosine_distance(list1, list2):
+    if len(list1) == 1:
+        return 1/list1[0]
+
     # Calculate dot product
     dot_product = sum(x * y for x, y in zip(list1, list2))
 
@@ -95,9 +100,12 @@ def main(*, database_path: PathLike[str]) -> None:
 
         indexed_how_many_pages = ui.label()
 
+
+    
+
         @ui.refreshable
         def show_stems_info(arr_of_dict = None):
-            if not arr_of_dict:
+            if arr_of_dict is None:
                 return
             
 
@@ -128,12 +136,12 @@ def main(*, database_path: PathLike[str]) -> None:
             ui.button('Show TFxIDF/max(TF) calculation info', on_click=dialog.open)
             
 
-        show_stems_info()
+
 
 
         @ui.refreshable
         def show_vector_space_info(vector_space_dict = None):
-            if not vector_space_dict:
+            if vector_space_dict is None:
                 return
             
             columns = [
@@ -159,7 +167,25 @@ def main(*, database_path: PathLike[str]) -> None:
             ui.button('Show Vector Space info', on_click=dialog.open)
             
 
-        show_vector_space_info()
+
+        def show_each_page(each_info):
+            with ui.card().classes("w-full"):
+                with ui.row().classes("w-full"):
+                    output_label_rank = ui.label("1").classes("text-4xl")
+                    output_label_title = ui.label(each_info["title"]).classes("text-2xl")
+                    output_label_size = ui.label("Size: "+str(each_info["size"]))
+                    output_label_time = ui.label("Time: "+str(each_info['mod_time']))
+                with ui.column().classes("w-full"):
+                    with ui.scroll_area().classes('w-full h-32 border'):
+                        output_label_text = ui.label(str(each_info["plaintext"])[:339])
+
+        @ui.refreshable
+        def show_all_pages(arr_info=None):
+            if arr_info is None:
+                return
+            for each_info in arr_info:
+                show_each_page(each_info)
+
 
         async def submission_onclick():
             output_to_call_function = []
@@ -169,10 +195,12 @@ def main(*, database_path: PathLike[str]) -> None:
             indexed_how_many_pages.text = f"Finding from {len(page_ids)} pages"
 
             for stem_raw in input_field.value.lower().split(","):
-
-                stem = stem_raw.strip()
-
                 dict_info = {}
+
+                dict_info["stem_original"] = stem_raw
+
+                stem = porter(stem_raw.strip())
+
                 dict_info["stem"] = stem
 
                 dict_info["tf_dict"] = {}
@@ -196,13 +224,13 @@ def main(*, database_path: PathLike[str]) -> None:
                     dict_info["tf_dict"][x["page__id"]] = {"tf":x['sum']}
                     each_page_tf[x["page__id"]] = x["sum"]
 
-                print(each_page_tf)
+                #print(each_page_tf)
                 ## max(tf) norm
                 page_ids_in_dict = list(each_page_tf.keys())
 
                 for page_id_to_norm in page_ids_in_dict:
-                    print("Begin norm")
-                    print(page_id_to_norm, type(page_id_to_norm))
+                    #print("Begin norm")
+                    #print(page_id_to_norm, type(page_id_to_norm))
                     try:
                         res_norm = (
                             await MODELS.WordOccurrence.filter(page__id=page_id_to_norm)
@@ -218,13 +246,13 @@ def main(*, database_path: PathLike[str]) -> None:
 
                         print(traceback.format_exc())
 
-                    print(res_norm)
+                    #print(res_norm)
                     dict_info["tf_dict"][page_id_to_norm]["maxtf"] = res_norm[0]["frequency"]
-                    dict_info["tf_dict"][page_id_to_norm]["tfnorm"] = dict_info["tf_dict"][page_id_to_norm]["tf"] # / res_norm[0]["frequency"]
+                    dict_info["tf_dict"][page_id_to_norm]["tfnorm"] = dict_info["tf_dict"][page_id_to_norm]["tf"] / res_norm[0]["frequency"]
                     each_page_tf[page_id_to_norm] /= res_norm[0]["frequency"]
                     # for x in res:
-                print("After norm")
-                print(each_page_tf)
+                #print("After norm")
+                #print(each_page_tf)
 
                 word_idf = log2(len(page_ids) / len(each_page_tf))
 
@@ -237,19 +265,25 @@ def main(*, database_path: PathLike[str]) -> None:
                 for page_id_calc_tfxidf in page_ids_in_dict:
                     dict_info["tf_dict"][page_id_calc_tfxidf]["tfxidf_div_maxtf"] = dict_info["tf_dict"][page_id_calc_tfxidf]["tfnorm"] * dict_info["idf"]
                     
-                print(tfxidf)
+                #print(tfxidf)
 
                 output_to_call_function.append(dict_info)
 
             all_pages_in_consideration = set()
             for dict_info in output_to_call_function:
-                print(dict_info)
+                #print(dict_info)
                 all_pages_in_consideration = all_pages_in_consideration.union(set(dict_info["tf_dict"].keys()))
 
             vector_space_dict = {page:{dict_info['stem']:dict_info['tf_dict'].get(page, {}).get("tfxidf_div_maxtf", 0) for dict_info in output_to_call_function} for page in all_pages_in_consideration}
 
-            for page in all_pages_in_consideration:
-                vector = vector_space_dict[page].values()
+            # filter to only consider full matches
+
+            vector_space_dict = {k:v for k,v in vector_space_dict.items() if not any(x==0 for x in v.values())}
+
+            all_pages_in_consideration_afterfilter = vector_space_dict.keys()
+
+            for page in all_pages_in_consideration_afterfilter:
+                vector = list(vector_space_dict[page].values())
                 unit_vector = [1 for _ in range(len(vector))]
                 vector_space_dict[page]["__cos"] = cosine_distance(vector, unit_vector)
 
@@ -257,9 +291,26 @@ def main(*, database_path: PathLike[str]) -> None:
             print(vector_space_dict)
             # print(all_pages_in_consideration)
             show_stems_info.refresh(output_to_call_function)
-            show_vector_space_info(vector_space_dict)
+            show_vector_space_info.refresh(vector_space_dict)
+
+            vector_space_dict_sorted = dict(sorted(vector_space_dict.items(), key=lambda x: x[1]['__cos']))
+            print("==========")
+            print(vector_space_dict_sorted)
+            
+            for_show_all_pages = []
+
+            for k,v in vector_space_dict_sorted.items():
+                res_each_page = await MODELS.Page.filter(id=k).limit(1).values("url__content", "mod_time", "size", "text", "plaintext", "title")
+                for_show_all_pages.append({'title':res_each_page[0]['title'], 'size':res_each_page[0]['size'], 'mod_time':res_each_page[0]['mod_time'], 'plaintext':res_each_page[0]['plaintext']})
+
+            show_all_pages.refresh(for_show_all_pages)
+
 
         submit_btn = ui.button("Submit", on_click=submission_onclick)
+        show_stems_info()
+        show_vector_space_info()
+        show_all_pages()
+        show_all_pages.refresh()
 
     app.on_startup(on_startup)  # type: ignore
     app.on_shutdown(on_shutdown)  # type: ignore
