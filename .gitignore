@@ -162,8 +162,10 @@ cython_debug/
 # }
 
 # custom {
+*.db
+*.db-shm
+*.db-wal
 .vscode/
-/database.db
 /spider_result.txt
-/web_args.json
+web_args.json
 # }
