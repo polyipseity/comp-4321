@@ -21,7 +21,7 @@ from .._util import (
 from ..crawl import Crawler
 from ..crawl.concurrency import ConcurrentCrawler
 from ..database.output import summary_s
-from ..database.models import APP_NAME, MODELS
+from ..database.models import MODELS, default_config
 from ..index import IndexedPage, UnindexedPage, index_page
 
 _PROGRAM = __package__ or __name__
@@ -68,20 +68,7 @@ async def main(
 
         async with (
             Tortoise_context(
-                {
-                    "apps": {
-                        APP_NAME: {
-                            "default_connection": "default",
-                            "models": ("egod_search.database.models",),
-                        }
-                    },
-                    "connections": {
-                        "default": f"sqlite://{database_path.__fspath__()}",
-                    },
-                    "routers": (),
-                    "timezone": "UTC",
-                    "use_tz": True,
-                }
+                default_config(URL(f"sqlite://{database_path.__fspath__()}"))
             ),
             tqdmStepper(disable=not show_progress, desc="all", unit="steps") as stepper,
         ):
