@@ -1,7 +1,7 @@
 # -*- coding: UTF-8 -*-
 from asyncio import gather
 from itertools import chain
-from typing import Any, NamedTuple, Self, Type, TypeVar, cast
+from typing import NamedTuple, Self, Type, TypeVar, cast
 from tortoise import Model
 from tortoise.fields import (
     BigIntField,
@@ -201,6 +201,7 @@ class Page(Model):
                         page=new_page,
                         word=word_map[word],
                         positions=",".join(map(str, positions)),
+                        frequency=len(positions),
                     )
                     for word, positions in page.word_occurrences.items()
                 )
@@ -211,6 +212,7 @@ class Page(Model):
                         page=new_page,
                         word=word_map[word],
                         positions=",".join(map(str, positions)),
+                        frequency=len(positions),
                     )
                     for word, positions in page.word_occurrences_title.items()
                 )
@@ -248,39 +250,12 @@ class WordOccurrence(Model):
     The word.
     """
 
-    positions = TextField(
-        source_field="positions", validators=(CommaSeparatedIntegerListValidator(),)
-    )
+    positions = TextField(validators=(CommaSeparatedIntegerListValidator(),))
     """
     Positions of the word occurrence on a page.
     """
 
-    class _FrequencyField(BigIntField):
-        has_db_field = False
-        indexable = False
-        skip_to_python_if_native = False
-
-        def __init__(self, *args: Any, **kwargs: Any) -> None:
-            super().__init__(
-                source_field="positions", generated=True, null=False, *args, **kwargs
-            )
-
-        # @override
-        @property
-        def constraints(self) -> dict[object, object]:
-            return {**super().constraints, "ge": 0}  # type: ignore
-
-        # @override
-        def to_db_value(self, value: Any, instance: Type[Model] | Model) -> Any:
-            raise NotImplementedError()
-
-        # @override
-        def to_python_value(self, value: Any) -> Any:
-            value = str(value)
-            value = bool(value) + value.count(",")
-            return super().to_python_value(value)
-
-    frequency = _FrequencyField()
+    frequency = BigIntField()
     """
     Frequency of the word in the page.
     """
