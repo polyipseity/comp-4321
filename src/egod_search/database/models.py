@@ -1,6 +1,8 @@
 # -*- coding: UTF-8 -*-
 from asyncio import gather
+from asyncstdlib import tuple as atuple
 from itertools import chain
+from re import NOFLAG
 from typing import NamedTuple, Self, Type, TypeVar, cast
 from tortoise import Model
 from tortoise.fields import (
@@ -12,14 +14,15 @@ from tortoise.fields import (
     ForeignKeyRelation,
     ManyToManyField,
     ManyToManyRelation,
+    OneToOneField,
+    OneToOneRelation,
+    OneToOneNullableRelation,
     RESTRICT,
+    SET_NULL,
     TextField,
 )
 from tortoise.transactions import atomic
-from tortoise.validators import (
-    CommaSeparatedIntegerListValidator,
-    MinValueValidator,
-)
+from tortoise.validators import MinValueValidator, RegexValidator
 
 from .. import NAME
 from ..index import IndexedPage
@@ -30,6 +33,150 @@ APP_NAME = NAME
 """
 App name of the models.
 """
+
+
+class Page(Model):
+    """
+    An indexed page.
+    """
+
+    class Meta(Model.Meta):
+        """
+        Model metadata.
+        """
+
+        abstract = True
+
+    url: OneToOneRelation["URL"]
+    """
+    URL of the page.
+    """
+
+    mod_time = DatetimeField()
+    """
+    Last modification time of the page, as reported by the server.
+    """
+
+    size = BigIntField(validators=(MinValueValidator(0),))
+    """
+    Size of the page, as reported by the server.
+    """
+
+    text = TextField()
+    """
+    Content of the page, including markups.
+    """
+
+    plaintext = TextField()
+    """
+    Plaintext content of the page, excluding markups.
+    """
+
+    title = TextField()
+    """
+    Title of the page.
+    """
+
+    outlinks: ManyToManyRelation["URL"] = ManyToManyField(
+        f"{APP_NAME}.URL", on_delete=RESTRICT, related_name="inlinks"
+    )
+    """
+    Links outgoing from this page.
+    """
+
+    @classmethod
+    @atomic()
+    async def index(cls, models: "Models", page: IndexedPage) -> bool:
+        """
+        Index an page and return whether the page is actually indexed.
+        """
+        urls = (str(page.url), *{str(link): ... for link in page.links})
+        await models.URL.bulk_create(
+            (models.URL(content=url) for url in urls),
+            on_conflict=("content",),
+            ignore_conflicts=True,
+        )
+        url_map = await models.URL.in_bulk(urls, "content")
+        url = url_map.pop(urls[0])
+        await url.fetch_related("page")
+        new_page = url.page
+        if new_page is not None and new_page.mod_time >= page.mod_time:
+            return False
+
+        if new_page is None:
+            new_page = models.Page()
+        new_page.update_from_dict(  # type: ignore
+            {
+                "mod_time": page.mod_time,
+                "text": page.text,
+                "plaintext": page.plaintext,
+                "size": page.size,
+                "title": page.title,
+            }
+        )
+        await new_page.save()
+        await new_page.outlinks.add(*url_map.values())
+        url.page = new_page
+        await url.save()
+
+        # clear index
+        await models.PageWord.filter(page=new_page).delete()
+
+        # create words
+        await models.Word.bulk_create(
+            (
+                models.Word(content=word)
+                for word in chain(page.word_occurrences, page.word_occurrences_title)
+            ),
+            on_conflict=("content",),
+            ignore_conflicts=True,
+        )
+        word_map = await models.Word.in_bulk(
+            chain(page.word_occurrences, page.word_occurrences_title), "content"
+        )
+
+        # create positions
+        wp_max, wp_max_title = await gather(
+            models.WordPositions.all().order_by("-id").only("id").first(),
+            models.WordPositionsTitle.all().order_by("-id").only("id").first(),
+        )
+        wp_base_pk = 1 if wp_max is None else (wp_max.id + 1)
+        wp_base_pk_title = 1 if wp_max_title is None else (wp_max_title.id + 1)
+        wps_map = {
+            word_str: models.WordPositions(
+                id=wp_base_pk + idx, positions=",".join(map(str, wo)), frequency=len(wo)
+            )
+            for idx, word_str in enumerate(word_map)
+            for wo in (page.word_occurrences.get(word_str, ()),)
+        }
+        wps_map_title = {
+            word_str: models.WordPositionsTitle(
+                id=wp_base_pk_title + idx,
+                positions=",".join(map(str, wo_t)),
+                frequency=len(wo_t),
+            )
+            for idx, word_str in enumerate(word_map)
+            for wo_t in (page.word_occurrences_title.get(word_str, ()),)
+        }
+        await gather(
+            models.WordPositions.bulk_create(wps_map.values()),
+            models.WordPositionsTitle.bulk_create(wps_map_title.values()),
+        )
+
+        # index words
+        await models.PageWord.bulk_create(
+            await atuple(
+                models.PageWord(
+                    page=new_page,
+                    word=word,
+                    positions_id=wps_map[word_str].id,
+                    positions_title_id=wps_map_title[word_str].id,
+                )
+                for word_str, word in word_map.items()
+            )
+        )
+
+        return True
 
 
 class URL(Model):
@@ -63,7 +210,18 @@ class URL(Model):
     The URL to be redirected from this URL, if any.
     """
 
-    inlinks: ManyToManyRelation["Page"]
+    page: OneToOneNullableRelation[Page] = OneToOneField(
+        f"{APP_NAME}.{Page.__name__}",
+        related_name="url",
+        on_delete=SET_NULL,
+        null=True,
+        default=None,
+    )
+    """
+    Corresponding page, if indexed.
+    """
+
+    inlinks: ManyToManyRelation[Page]
     """
     Pages linking to this URL.
     """
@@ -94,9 +252,9 @@ class Word(Model):
     """
 
 
-class Page(Model):
+class WordPositions(Model):
     """
-    An indexed page.
+    Word positions for a page—word pair.
     """
 
     class Meta(Model.Meta):
@@ -105,126 +263,48 @@ class Page(Model):
         """
 
         abstract = True
+        indexes = (("key"),)
+        unique_together = (("key",),)
 
-    url: ForeignKeyRelation[URL] = ForeignKeyField(
-        f"{APP_NAME}.{URL.__name__}", index=True, on_delete=RESTRICT, unique=True
+    id = BigIntField(generated=True, index=True, pk=True, unique=True)
+    """
+    ID.
+    """
+
+    key: OneToOneRelation["PageWord"]
+    """
+    Corresponding page pair.
+    """
+
+    positions = TextField(
+        validators=(RegexValidator(r"\A(?:|\d+(?:,\d+)*)\Z", NOFLAG),)
     )
     """
-    URL of the page.
+    Positions of the word occurrence on a page.
     """
 
-    mod_time = DatetimeField()
+    frequency = BigIntField(validators=(MinValueValidator(0),))
     """
-    Last modification time of the page, as reported by the server.
-    """
-
-    size = BigIntField(validators=(MinValueValidator(0),))
-    """
-    Size of the page, as reported by the server.
+    Frequency of the word in the page.
     """
 
-    text = TextField()
+
+class WordPositionsTitle(WordPositions):
     """
-    Content of the page, including markups.
+    Word positions for a page—word pair. For titles.
     """
 
-    plaintext = TextField()
-    """
-    Plaintext content of the page, excluding markups.
-    """
-
-    title = TextField()
-    """
-    Title of the page.
-    """
-
-    outlinks: ManyToManyRelation[URL] = ManyToManyField(
-        f"{APP_NAME}.{URL.__name__}", on_delete=RESTRICT, related_name="inlinks"
-    )
-    """
-    Links outgoing from this page.
-    """
-
-    @classmethod
-    @atomic()
-    async def index(cls, models: "Models", page: IndexedPage) -> bool:
+    class Meta(WordPositions.Meta):
         """
-        Index an page and return whether the page is actually indexed.
+        Model metadata.
         """
-        urls = (str(page.url), *{str(link): ... for link in page.links})
-        await models.URL.bulk_create(
-            (models.URL(content=url) for url in urls),
-            on_conflict=("content",),
-            ignore_conflicts=True,
-        )
-        url_map = await models.URL.in_bulk(urls, "content")
-        url = url_map.pop(urls[0])
-        old_page = await models.Page.get_or_none(url=url)
-        if old_page is not None and old_page.mod_time >= page.mod_time:
-            return False
 
-        new_page, _ = await models.Page.update_or_create(  # type: ignore
-            {
-                "mod_time": page.mod_time,
-                "text": page.text,
-                "plaintext": page.plaintext,
-                "size": page.size,
-                "title": page.title,
-            },
-            url=url,
-        )
-        await new_page.outlinks.clear()
-        await new_page.outlinks.add(*url_map.values())
-
-        # clear index
-        await gather(
-            models.WordOccurrence.filter(page=new_page).delete(),
-            models.WordOccurrenceTitle.filter(page=new_page).delete(),
-        )
-
-        # index words
-        await models.Word.bulk_create(
-            (
-                models.Word(content=word)
-                for word in chain(page.word_occurrences, page.word_occurrences_title)
-            ),
-            on_conflict=("content",),
-            ignore_conflicts=True,
-        )
-        word_map = await models.Word.in_bulk(
-            chain(page.word_occurrences, page.word_occurrences_title), "content"
-        )
-        await gather(
-            models.WordOccurrence.bulk_create(
-                (
-                    models.WordOccurrence(
-                        page=new_page,
-                        word=word_map[word],
-                        positions=",".join(map(str, positions)),
-                        frequency=len(positions),
-                    )
-                    for word, positions in page.word_occurrences.items()
-                )
-            ),
-            models.WordOccurrenceTitle.bulk_create(
-                (
-                    models.WordOccurrenceTitle(
-                        page=new_page,
-                        word=word_map[word],
-                        positions=",".join(map(str, positions)),
-                        frequency=len(positions),
-                    )
-                    for word, positions in page.word_occurrences_title.items()
-                )
-            ),
-        )
-
-        return True
+        abstract = True
 
 
-class WordOccurrence(Model):
+class PageWord(Model):
     """
-    A word occurrence on a page.
+    A page—word pair.
     """
 
     class Meta(Model.Meta):
@@ -250,36 +330,30 @@ class WordOccurrence(Model):
     The word.
     """
 
-    positions = TextField(validators=(CommaSeparatedIntegerListValidator(),))
+    positions: OneToOneRelation[WordPositions] = OneToOneField(
+        f"{APP_NAME}.{WordPositions.__name__}", related_name="key", on_delete=RESTRICT
+    )
     """
-    Positions of the word occurrence on a page.
-    """
-
-    frequency = BigIntField()
-    """
-    Frequency of the word in the page.
+    Word positions for plaintext.
     """
 
-
-class WordOccurrenceTitle(WordOccurrence):
+    positions_title: OneToOneRelation[WordPositionsTitle] = OneToOneField(
+        f"{APP_NAME}.{WordPositionsTitle.__name__}",
+        related_name="key",
+        on_delete=RESTRICT,
+    )
     """
-    A word occurrence on a page, for titles.
+    Word positions for title.
     """
-
-    class Meta(WordOccurrence.Meta):
-        """
-        Model metadata.
-        """
-
-        abstract = True
 
 
 class Models(NamedTuple):
     Page: Type[Page]
+    PageWord: Type[PageWord]
     URL: Type[URL]
     Word: Type[Word]
-    WordOccurrence: Type[WordOccurrence]
-    WordOccurrenceTitle: Type[WordOccurrenceTitle]
+    WordPositions: Type[WordPositions]
+    WordPositionsTitle: Type[WordPositionsTitle]
 
 
 def new_model(model: type[_TExtendsModel]) -> type[_TExtendsModel]:
@@ -295,10 +369,11 @@ def new_models() -> Models:
     """
     return Models(
         new_model(Page),
+        new_model(PageWord),
         new_model(URL),
         new_model(Word),
-        new_model(WordOccurrence),
-        new_model(WordOccurrenceTitle),
+        new_model(WordPositions),
+        new_model(WordPositionsTitle),
     )
 
 

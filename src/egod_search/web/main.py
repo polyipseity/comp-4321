@@ -215,7 +215,7 @@ def main(*, database_path: PathLike[str]) -> None:
                 each_page_tf = {}
 
                 res = (
-                    await MODELS.WordOccurrence.filter(word=mget)
+                    await MODELS.PageWord.filter(word=mget)
                     .annotate(sum=Sum("frequency"))
                     .group_by("page__id")
                     .values("page__id", "sum")
@@ -233,7 +233,7 @@ def main(*, database_path: PathLike[str]) -> None:
                     #print(page_id_to_norm, type(page_id_to_norm))
                     try:
                         res_norm = (
-                            await MODELS.WordOccurrence.filter(page__id=page_id_to_norm)
+                            await MODELS.PageWord.filter(page__id=page_id_to_norm)
                             .order_by(
                                 "-frequency"  # Supports ordering by related models too.
                                 # A ‘-’ before the name will result in descending sort order, default is ascending.

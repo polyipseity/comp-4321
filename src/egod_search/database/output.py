@@ -1,9 +1,8 @@
 # -*- coding: UTF-8 -*-
-from asyncio import gather
-from collections import defaultdict
 from datetime import timezone
 from io import StringIO
-from itertools import chain
+from tortoise.expressions import RawSQL
+from tortoise.query_utils import Prefetch
 from tqdm.auto import tqdm
 
 from .._util import SupportsWrite
@@ -29,17 +28,23 @@ async def summary(
     """
     total = await models.Page.all().count()
     total = total if count < 0 else min(count, total)
-    separator = ""
+    page_separator = ""
     with tqdm(
         total=total,
         disable=not show_progress,
         desc="writing summary",
         unit="pages",
     ) as progress:
-        tmp = models.Page.all().order_by("id").prefetch_related("url")
+        tmp = (
+            models.Page.all()
+            .order_by("id")
+            .prefetch_related(
+                Prefetch("url", models.URL.all().only("page_id", "content"))
+            )
+        )
         async for page in tmp.limit(count) if count >= 0 else tmp:
-            fp.write(separator)
-            separator = f"{'-' * 30}\n"  # 100
+            fp.write(page_separator)
+            page_separator = f"{'-' * 30}\n"  # 100
 
             fp.write(page.title or "(no title)")
             fp.write("\n")
@@ -52,31 +57,31 @@ async def summary(
             fp.write(str(page.size))  # number of bytes
             fp.write("\n")
 
-            words = defaultdict[str, int](int)
-            for word in chain(
-                *await gather(
-                    models.WordOccurrence.filter(page=page).prefetch_related("word"),
-                    models.WordOccurrenceTitle.filter(page=page).prefetch_related(
-                        "word"
-                    ),
-                )
-            ):
-                words[word.word.content] += word.frequency
-            fp.write(
-                "; ".join(
-                    (
-                        f"{item[0]} {item[1]}"
-                        for item in sorted(
-                            words.items(), key=lambda item: (-item[1], item[0])
-                        )[:keyword_count]
+            word_separator = ""
+            tmp = (
+                models.PageWord.filter(page=page)
+                .annotate(
+                    frequency=RawSQL(
+                        f"(SELECT frequency FROM {models.WordPositions._meta.db_table} WHERE id = positions_id)"  # type: ignore
+                    )
+                    + RawSQL(
+                        f"(SELECT frequency FROM {models.WordPositionsTitle._meta.db_table} WHERE id = positions_title_id)"  # type: ignore
                     )
                 )
-                if keyword_count >= 0
-                else ""
+                .order_by("-frequency", "word__content")
+                .prefetch_related(
+                    Prefetch("word", models.Word.all().only("id", "content"))
+                )
             )
+            async for word in tmp.limit(keyword_count) if keyword_count >= 0 else tmp:
+                frequency = getattr(word, "frequency")
+                assert isinstance(frequency, int)
+                fp.write(word_separator)
+                word_separator = "; "
+                fp.write(f"{word.word.content} {frequency}")
             fp.write("\n")
 
-            tmp = page.outlinks.all().order_by("content")
+            tmp = page.outlinks.all().order_by("content").only("content")
             async for outlink in tmp.limit(link_count) if link_count >= 0 else tmp:
                 fp.write(outlink.content)
                 fp.write("\n")
