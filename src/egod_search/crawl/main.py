@@ -68,7 +68,7 @@ async def main(
 
         async with (
             Tortoise_context(
-                default_config(URL(f"sqlite://{database_path.__fspath__()}"))
+                default_config(URL(f"sqlite:///{database_path.__fspath__()}"))
             ),
             tqdmStepper(disable=not show_progress, desc="all", unit="steps") as stepper,
         ):
