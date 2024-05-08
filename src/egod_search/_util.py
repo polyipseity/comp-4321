@@ -14,11 +14,14 @@ from contextlib import asynccontextmanager
 from datetime import datetime
 from email.message import Message
 from functools import partial, wraps
+from inspect import isawaitable
 from multiprocessing import get_context
 from multiprocessing.pool import Pool
 from os import name
-from types import EllipsisType
+from types import EllipsisType, TracebackType
 from unittest import IsolatedAsyncioTestCase
+from tortoise import Tortoise
+from tqdm.auto import tqdm
 from typing import (
     Any,
     AsyncIterable,
@@ -28,10 +31,11 @@ from typing import (
     Iterator,
     Mapping,
     Protocol,
+    Self,
+    Type,
     TypeVar,
+    overload,
 )
-
-from tortoise import Tortoise
 
 _AnyStr_co = TypeVar("_AnyStr_co", str, bytes, covariant=True)
 _AnyStr_contra = TypeVar("_AnyStr_contra", str, bytes, contravariant=True)
@@ -89,6 +93,77 @@ class SupportsWrite(Protocol[_AnyStr_contra]):
         ...
 
 
+class tqdmStepper:
+    """
+    Execute the provided steps sequentially with a `tqdm` progress bar.
+    """
+
+    __slots__ = ("_steps", "_args", "_kwargs")
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        """
+        Initialize a stepper with no steps and `tqdm` arguments.
+        """
+        self._steps = list[Callable[[], object]]()
+        self._args = args
+        self._kwargs = kwargs
+
+    def queue(self, step: Callable[[], object]) -> None:
+        """
+        Queue a step to be executed.
+        """
+        self._steps.append(step)
+
+    async def __aenter__(self) -> Self:
+        """
+        Noop. For making this class a context manager.
+        """
+        return self
+
+    async def __aexit__(
+        self,
+        exc_type: Type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> None:
+        """
+        Execute the prepared steps.
+        """
+        for step in tqdm(self._steps, *self._args, **self._kwargs):
+            await wrap_async(step())
+
+
+class tqdmStepperSync(tqdmStepper):
+    """
+    Execute the provided steps sequentially with a `tqdm` progress bar.
+
+    Sync version.
+    """
+
+    __slots__ = ("_steps", "_args", "_kwargs")
+
+    # @override
+    def queue(self, step: Callable[[], object]) -> None:
+        return super().queue(step)
+
+    def __enter__(self) -> None:
+        """
+        Noop. For making this class a context manager.
+        """
+
+    def __exit__(
+        self,
+        exc_type: Type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> None:
+        """
+        Execute the prepared steps.
+        """
+        for step in tqdm(self._steps, *self._args, **self._kwargs):
+            step()
+
+
 class _AsyncTestCase_FakeContextVars:
     def run(self, func: Callable[..., _T], *args: object, **kwargs: object) -> _T:
         return func(*args, **kwargs)
@@ -115,7 +190,7 @@ class AsyncTestCase(IsolatedAsyncioTestCase):
 
 @wraps(Tortoise.init)  # type: ignore
 @asynccontextmanager
-async def Tortoise_context(*args: Any, **kwargs: Any) -> AsyncIterator[None]:
+async def Tortoise_context(*args: object, **kwargs: object) -> AsyncIterator[None]:
     await Tortoise.init(*args, **kwargs)  # type: ignore
     try:
         await Tortoise.generate_schemas()
@@ -307,3 +382,20 @@ def parse_http_datetime(val: str) -> datetime:
     return datetime.strptime(
         val.replace("GMT", "+0000"), "%d %m %Y %H:%M:%S %z"
     )  # `%Z` does not work, see https://bugs.python.org/issue22377`
+
+
+@overload
+async def wrap_async(value: Awaitable[_T]) -> _T: ...
+
+
+@overload
+async def wrap_async(value: Awaitable[_T] | _T) -> _T: ...
+
+
+async def wrap_async(value: Awaitable[_T] | _T):
+    """
+    Unify async and sync values into async ones.
+    """
+    if isawaitable(value):
+        return await value
+    return value
