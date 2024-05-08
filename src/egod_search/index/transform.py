@@ -12,7 +12,7 @@ _WORD_TOKENIZER = TreebankWordTokenizer()
 
 STOP_WORDS = frozenset(
     word.casefold()
-    for word in (files(PACKAGE_NAME) / "res/stop_words.txt").read_text().splitlines()
+    for word in (files(PACKAGE_NAME) / "res/stop words.txt").read_text().splitlines()
 )
 """
 Set of stop words.

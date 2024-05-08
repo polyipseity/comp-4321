@@ -340,7 +340,7 @@ class WordTestCase(AsyncTestCase):
         input, output = await gather(
             to_thread((files(PACKAGE_NAME) / "res/words.txt").read_text),
             to_thread(
-                (files(PACKAGE_NAME) / "res/words_porter_expected.txt").read_text
+                (files(PACKAGE_NAME) / "res/tests/porter_mp/expected.txt").read_text
             ),
         )
         inputs = input.splitlines()
