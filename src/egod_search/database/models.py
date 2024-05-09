@@ -247,7 +247,11 @@ class URL(Model):
     """
 
     redirect: ForeignKeyNullableRelation[Self] = ForeignKeyField(
-        f"{APP_NAME}.URL", default=None, null=True, on_delete=RESTRICT
+        f"{APP_NAME}.URL",
+        default=None,
+        null=True,
+        on_delete=RESTRICT,
+        related_name=False,
     )
     """
     The URL to be redirected from this URL, if any.
@@ -367,14 +371,20 @@ class PageWord(Model):
         unique_together = (("page", "word"),)
 
     page: ForeignKeyRelation[Page] = ForeignKeyField(
-        f"{APP_NAME}.{Page.__name__}", index=True, on_delete=RESTRICT
+        f"{APP_NAME}.{Page.__name__}",
+        index=True,
+        on_delete=RESTRICT,
+        related_name=False,
     )
     """
     The page the word is on.
     """
 
     word: ForeignKeyRelation[Word] = ForeignKeyField(
-        f"{APP_NAME}.{Word.__name__}", index=True, on_delete=RESTRICT
+        f"{APP_NAME}.{Word.__name__}",
+        index=True,
+        on_delete=RESTRICT,
+        related_name=False,
     )
     """
     The word.
