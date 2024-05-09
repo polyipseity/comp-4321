@@ -111,7 +111,10 @@ class Page(Model):
         abstract = True
 
     url: OneToOneRelation[URL] = OneToOneField(
-        f"{APP_NAME}.{URL.__name__}", related_name="page", on_delete=RESTRICT
+        f"{APP_NAME}.{URL.__name__}",
+        related_name="page",
+        on_delete=RESTRICT,
+        index=True,
     )
     """
     URL of the page.
@@ -337,7 +340,10 @@ class WordPositions(Model):
         unique_together = (("key",),)
 
     key: OneToOneRelation[PageWord] = OneToOneField(
-        f"{APP_NAME}.{PageWord.__name__}", related_name="positions", on_delete=CASCADE
+        f"{APP_NAME}.{PageWord.__name__}",
+        related_name="positions",
+        on_delete=CASCADE,
+        index=True,
     )
     """
     Corresponding page pair.
@@ -379,6 +385,7 @@ class WordPositionsTitle(WordPositions):
         f"{APP_NAME}.{PageWord.__name__}",
         related_name="positions_title",
         on_delete=CASCADE,
+        index=True,
     )
     """
     Corresponding page pair.
