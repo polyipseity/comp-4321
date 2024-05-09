@@ -23,7 +23,6 @@ from tortoise.fields import (
 )
 from tortoise.transactions import atomic
 from tortoise.validators import MinValueValidator, RegexValidator
-from yarl import URL as yURL
 
 from .. import NAME
 from ..index import IndexedPage
@@ -36,13 +35,13 @@ App name of the models.
 """
 
 
-def default_config(url: yURL):
+def default_config(connection: str):
     """
     Default initialization configuration.
     """
     return {
         "apps": {APP_NAME: {"default_connection": "default", "models": (__name__,)}},
-        "connections": {"default": str(url)},
+        "connections": {"default": connection},
         "routers": (),
         "timezone": "UTC",
         "use_tz": True,

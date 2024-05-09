@@ -15,7 +15,6 @@ from subprocess import run
 from sys import executable, exit, stderr, stdin, stdout
 from tortoise import Tortoise
 from typing import Callable
-from yarl import URL
 
 _CONFIGURATION_PATH = Path("web_args.json")
 _PROGRAM = __package__ or __name__
@@ -74,7 +73,7 @@ async def on_startup() -> None:
     On server startup.
     """
     await Tortoise.init( # type: ignore
-        default_config(URL(f"sqlite:///{DATABASE_PATH.__fspath__()}")),
+        default_config(f"sqlite{DATABASE_PATH.as_uri()[len('file'):]}"),
     )
     await Tortoise.generate_schemas()
 

@@ -66,9 +66,11 @@ async def main(
                 f"Database concurrency must be positive: {database_concurrency}"
             )
 
+        database_path = await database_path.resolve()
+
         async with (
             Tortoise_context(
-                default_config(URL(f"sqlite:///{database_path.__fspath__()}"))
+                default_config(f"sqlite{database_path.as_uri()[len('file'):]}")
             ),
             tqdmStepper(disable=not show_progress, desc="all", unit="steps") as stepper,
         ):
