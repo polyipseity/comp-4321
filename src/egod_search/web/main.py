@@ -91,8 +91,8 @@ def layout(title: str) -> None:
     with ui.header():
         ui.button(on_click=lambda: left_drawer.toggle(),icon="menu")
         ui.label("E-God Search").tailwind.font_size("4xl").font_weight("light")
-        with ui.menu():
-            ui.menu_item("Home", on_click=lambda:ui.navigate.to("/"), auto_close=True)
+        """with ui.menu():
+            ui.menu_item("Home", on_click=lambda:ui.navigate.to("/"), auto_close=True)"""
     with ui.left_drawer(value=False, fixed=False, bordered=True, elevated=True) as left_drawer:
         ui.button("Home", on_click=lambda:ui.navigate.to("/"))
         ui.button("Search", on_click=lambda:ui.navigate.to("/search"))
@@ -110,7 +110,8 @@ if __name__ in {"__main__", "__mp_main__"}:
 
     basicConfig(level=INFO)
     LOGGER = getLogger(_PROGRAM)
-    LOGGER.info(f"config: {dumps(config, ensure_ascii=False, indent="\t", sort_keys=True)}")
+    tab_character = "\t"
+    LOGGER.info(f"config: {dumps(config, ensure_ascii=False, indent=tab_character, sort_keys=True)}")
 
     DATABASE_PATH = SyncPath(config["database_path"]).resolve()
 
