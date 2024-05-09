@@ -93,9 +93,13 @@ def layout(title: str) -> None:
     Global page layout.
     """
     ui.page_title(f"{title} | E-God Search")
-    with ui.header():
-        ui.button(on_click=lambda: left_drawer.toggle(), icon="menu")
-        ui.label("E-God Search").tailwind.font_size("4xl").font_weight("light")
+    with ui.header(elevated=True):
+        ui.button(on_click=lambda: left_drawer.toggle(), icon="menu").props(
+            "unelevated"
+        )
+        ui.button("E-God Search", on_click=lambda: ui.navigate.to("/")).props(
+            "unelevated padding=0 no-caps no-wrap"
+        ).tailwind.font_size("4xl").font_weight("light")
         """with ui.menu():
             ui.menu_item("Home", on_click=lambda:ui.navigate.to("/"), auto_close=True)"""
     with ui.left_drawer(
