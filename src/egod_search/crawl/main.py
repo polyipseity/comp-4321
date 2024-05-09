@@ -301,7 +301,7 @@ def parser(parent: Callable[..., ArgumentParser] | None = None) -> ArgumentParse
     )
     parser.add_argument(
         "--no-progress",
-        action=f"store_{str(not PARSER_OPTION_DEFAULTS["show_progress"]).casefold()}",
+        action=f"store_{str(not PARSER_OPTION_DEFAULTS['show_progress']).casefold()}",
         dest="show_progress",
         help="disable showing progress; "
         f"default {str(PARSER_OPTION_DEFAULTS['show_progress']).lower()}",
