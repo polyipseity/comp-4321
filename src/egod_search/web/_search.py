@@ -22,7 +22,13 @@ def cosine_distance(list1: Sequence[float], list2: Sequence[float]):
     # Calculate cosine distance
     cosine_distance = 1 - (dot_product / (magnitude_list1 * magnitude_list2))
 
+    if abs(cosine_distance) < 1e-9:
+        return 0
+
     return cosine_distance
+
+def magnitude_of_list(list1: Sequence[float]):
+    return sqrt(sum(x**2 for x in list1))
 
 
 @ui.page("/search")
@@ -135,6 +141,7 @@ def search():
                 "field": "__cos",
                 "required": True,
                 "align": "left",
+                "sortable": True,
             }
         )
         rows = list[VectorSpaceDict]()
@@ -164,8 +171,8 @@ def search():
                 ui.label("1").classes("text-4xl")
                 ui.label(each_info["title"]).classes("text-2xl")
                 ui.link(each_info["url"])
-                ui.label("Size: " + each_info["size"])
-                ui.label("Time: " + each_info["mod_time"])
+                ui.label("Size: " + str(each_info["size"]))
+                ui.label("Time: " + str(each_info["mod_time"]))
             with ui.column().classes("w-full"):
                 with ui.scroll_area().classes("w-full h-32 border"):
                     ui.label(each_info["plaintext"][:339])
@@ -237,12 +244,14 @@ def search():
                 # for x in res:
             # print("After norm")
             # print(each_page_tf)
-            res_get_new_tf = await MODELS.WordPositions.filter(key__word__content = stem_raw).values("tf", "key__page__id")
+            res_get_new_tf = await MODELS.WordPositions.filter(key__word__content = stem_raw).values("tf_normalized", "frequency", "key__page__id")
 
             for each_elem in res_get_new_tf:
                 print(each_elem)
                 dict_info["tf_dict"][each_elem["key__page__id"]] = dict_info["tf_dict"].get(each_elem["key__page__id"], {})
-                dict_info["tf_dict"][each_elem["key__page__id"]]["tfnorm"] = each_elem["tf"]
+                dict_info["tf_dict"][each_elem["key__page__id"]]["tfnorm"] = each_elem["tf_normalized"]
+                dict_info["tf_dict"][each_elem["key__page__id"]]["frequency"] = each_elem["frequency"]
+                dict_info["tf_dict"][each_elem["key__page__id"]]["maxtf"] = each_elem["frequency"] / each_elem["tf_normalized"]
 
             page_ids_in_dict = list(dict_info["tf_dict"].keys())
             #patching!!!
@@ -275,24 +284,29 @@ def search():
             }
             for page in all_pages_in_consideration
         }
-        # filter to only consider full matches
-        vector_space_dict = {
-            k: v
-            for k, v in vector_space_dict.items()
-            if not any(x == 0 for x in v.values())
-        }
+        print("VECTOR SPACE BEFORE FILTER")
+        print(vector_space_dict)
+
+        if False:
+            # filter to only consider full matches
+            vector_space_dict = {
+                k: v
+                for k, v in vector_space_dict.items()
+                if not any(x == 0 for x in v.values())
+            }
         all_pages_in_consideration_afterfilter = vector_space_dict.keys()
         for page in all_pages_in_consideration_afterfilter:
             vector = list(vector_space_dict[page].values())
             unit_vector = [1 for _ in range(len(vector))]
             vector_space_dict[page]["__cos"] = cosine_distance(vector, unit_vector)
+            vector_space_dict[page]["__mag"] = magnitude_of_list(vector)
         print("VECTOR SPACE")
         print(vector_space_dict)
         # print(all_pages_in_consideration)
         show_stems_info.refresh(output_to_call_function)
         show_vector_space_info.refresh(vector_space_dict)
         vector_space_dict_sorted = dict(
-            sorted(vector_space_dict.items(), key=lambda x: x[1]["__cos"])
+            sorted(vector_space_dict.items(), key=lambda x: (x[1]["__cos"], 1/x[1]["__mag"]))
         )
         print("==========")
         print(vector_space_dict_sorted)
