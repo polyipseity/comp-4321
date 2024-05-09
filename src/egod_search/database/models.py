@@ -1,12 +1,11 @@
 # -*- coding: UTF-8 -*-
 from asyncio import gather
 from itertools import chain
-from re import NOFLAG
 from typing import NamedTuple, Self, Type, TypeVar, cast
-from numpy import array, float64
 from tortoise import Model
 from tortoise.fields import (
     BigIntField,
+    CASCADE,
     CharField,
     DatetimeField,
     FloatField,
@@ -19,11 +18,15 @@ from tortoise.fields import (
     OneToOneRelation,
     OneToOneNullableRelation,
     RESTRICT,
-    SET_NULL,
     TextField,
 )
+from tortoise.functions import Max
 from tortoise.transactions import atomic
-from tortoise.validators import MaxValueValidator, MinValueValidator, RegexValidator
+from tortoise.validators import (
+    CommaSeparatedIntegerListValidator,
+    MaxValueValidator,
+    MinValueValidator,
+)
 
 from .. import NAME
 from ..index import IndexedPage
@@ -49,6 +52,52 @@ def default_config(connection: str):
     }
 
 
+class URL(Model):
+    """
+    A URL.
+    """
+
+    class Meta(Model.Meta):
+        """
+        Model metadata.
+        """
+
+        abstract = True
+
+    id = BigIntField(generated=True, index=True, pk=True, unique=True)
+    """
+    URL ID.
+    """
+
+    content = CharField(2047, index=True, unique=True)
+    """
+    The URL itself.
+
+    The length limit 2047 is commonly used in search engines. See <https://stackoverflow.com/a/417184>.
+    """
+
+    redirect: ForeignKeyNullableRelation[Self] = ForeignKeyField(
+        f"{APP_NAME}.URL",
+        default=None,
+        null=True,
+        on_delete=RESTRICT,
+        related_name=False,
+    )
+    """
+    The URL to be redirected from this URL, if any.
+    """
+
+    page: OneToOneNullableRelation["Page"]
+    """
+    Corresponding page, if indexed.
+    """
+
+    inlinks: ManyToManyRelation["Page"]
+    """
+    Pages linking to this URL.
+    """
+
+
 class Page(Model):
     """
     An indexed page.
@@ -61,7 +110,9 @@ class Page(Model):
 
         abstract = True
 
-    url: OneToOneRelation["URL"]
+    url: OneToOneRelation[URL] = OneToOneField(
+        f"{APP_NAME}.{URL.__name__}", related_name="page", on_delete=RESTRICT
+    )
     """
     URL of the page.
     """
@@ -113,14 +164,13 @@ class Page(Model):
         url_map = await models.URL.in_bulk(urls, "content")
         url = url_map.pop(urls[0])
         await url.fetch_related("page")
-        new_page = url.page
-        if new_page is not None and new_page.mod_time >= page.mod_time:
+        if url.page is not None and url.page.mod_time >= page.mod_time:
             return False
 
-        if new_page is None:
-            new_page = models.Page()
+        new_page = models.Page() if url.page is None else url.page
         new_page.update_from_dict(  # type: ignore
             {
+                "url": url,
                 "mod_time": page.mod_time,
                 "text": page.text,
                 "plaintext": page.plaintext,
@@ -129,9 +179,8 @@ class Page(Model):
             }
         )
         await new_page.save()
+        await new_page.outlinks.clear()
         await new_page.outlinks.add(*url_map.values())
-        url.page = new_page
-        await url.save()
 
         # clear index
         await models.PageWord.filter(page=new_page).delete()
@@ -149,125 +198,47 @@ class Page(Model):
             chain(page.word_occurrences, page.word_occurrences_title), "content"
         )
 
-        # create positions
-        wp_max, wp_max_title = await gather(
-            models.WordPositions.all().order_by("-id").only("id").first(),
-            models.WordPositionsTitle.all().order_by("-id").only("id").first(),
+        # create word—page pairs
+        pw_max_id = (
+            await models.PageWord.annotate(_ret=Max("id", 0))
+            .only("_ret")
+            .get()
+            .values_list("_ret", flat=True)
         )
-
-        wp_id_max = 0 if wp_max is None else wp_max.id
-        wps_map = {
-            word_str: models.WordPositions(
-                id=idx, positions=",".join(map(str, wo)), frequency=len(wo), tf=0
-            )
-            for idx, word_str in enumerate(word_map, wp_id_max + 1)
-            for wo in (page.word_occurrences.get(word_str, ()),)
-        }
-        try:
-            wp_max_freq = max(wps_map.values(), key=lambda item: item.frequency)
-        except ValueError:
-            pass
-        else:
-            if wp_max_freq.frequency != 0:
-                for wp, tf in zip(
-                    wps_map.values(),
-                    array([wp.frequency for wp in wps_map.values()], dtype=float64)
-                    / wp_max_freq.frequency,
-                    strict=True,
-                ):
-                    wp.tf = tf
-
-        wp_id_max_title = 0 if wp_max_title is None else wp_max_title.id
-        wps_map_title = {
-            word_str: models.WordPositionsTitle(
-                id=idx, positions=",".join(map(str, wo)), frequency=len(wo)
-            )
-            for idx, word_str in enumerate(word_map, wp_id_max_title + 1)
-            for wo in (page.word_occurrences_title.get(word_str, ()),)
-        }
-        try:
-            wp_max_freq_title = max(
-                wps_map_title.values(), key=lambda item: item.frequency
-            )
-        except ValueError:
-            pass
-        else:
-            if wp_max_freq_title.frequency != 0:
-                for wp, tf in zip(
-                    wps_map_title.values(),
-                    array(
-                        [wp.frequency for wp in wps_map_title.values()], dtype=float64
-                    )
-                    / wp_max_freq_title.frequency,
-                    strict=True,
-                ):
-                    wp.tf = tf
-
-        await gather(
-            models.WordPositions.bulk_create(wps_map.values()),
-            models.WordPositionsTitle.bulk_create(wps_map_title.values()),
-        )
-
-        # index words
-        await models.PageWord.bulk_create(
-            models.PageWord(
+        assert isinstance(pw_max_id, int)
+        page_word_map = {
+            word: models.PageWord(
+                id=id,
                 page=new_page,
                 word=word,
-                positions_id=wps_map[word_str].id,
-                positions_title_id=wps_map_title[word_str].id,
             )
-            for word_str, word in word_map.items()
+            for id, word in enumerate(word_map.values(), start=pw_max_id + 1)
+        }
+        await models.PageWord.bulk_create(page_word_map.values())
+
+        # create positions
+        await gather(
+            models.WordPositions.bulk_create(
+                models.WordPositions(
+                    key_id=page_word_map[word_map[word_str]].id,
+                    positions=",".join(map(str, wo.positions)),
+                    frequency=wo.frequency,
+                    tf_normalized=wo.tf_normalized,
+                )
+                for word_str, wo in page.word_occurrences.items()
+            ),
+            models.WordPositionsTitle.bulk_create(
+                models.WordPositionsTitle(
+                    key_id=page_word_map[word_map[word_str]].id,
+                    positions=",".join(map(str, wo.positions)),
+                    frequency=wo.frequency,
+                    tf_normalized=wo.tf_normalized,
+                )
+                for word_str, wo in page.word_occurrences_title.items()
+            ),
         )
 
         return True
-
-
-class URL(Model):
-    """
-    A URL.
-    """
-
-    class Meta(Model.Meta):
-        """
-        Model metadata.
-        """
-
-        abstract = True
-
-    id = BigIntField(generated=True, index=True, pk=True, unique=True)
-    """
-    URL ID.
-    """
-
-    content = CharField(2047, index=True, unique=True)
-    """
-    The URL itself.
-
-    The length limit 2047 is commonly used in search engines. See <https://stackoverflow.com/a/417184>.
-    """
-
-    redirect: ForeignKeyNullableRelation[Self] = ForeignKeyField(
-        f"{APP_NAME}.URL", default=None, null=True, on_delete=RESTRICT
-    )
-    """
-    The URL to be redirected from this URL, if any.
-    """
-
-    page: OneToOneNullableRelation[Page] = OneToOneField(
-        f"{APP_NAME}.{Page.__name__}",
-        related_name="url",
-        on_delete=SET_NULL,
-        null=True,
-        default=None,
-    )
-    """
-    Corresponding page, if indexed.
-    """
-
-    inlinks: ManyToManyRelation[Page]
-    """
-    Pages linking to this URL.
-    """
 
 
 class Word(Model):
@@ -294,6 +265,62 @@ class Word(Model):
     The length limit 255 is used to make it compatible with more database drivers.
     """
 
+    # Precomputing the document frequency makes the indexing too complicated.
+    #
+    # df = BigIntField(default=0, validators=(MinValueValidator(0),))
+    # """
+    # Document frequency, the number of documents with this word. Considers plaintext only.
+    # """
+
+    # df_title = BigIntField(default=0, validators=(MinValueValidator(0),))
+    # """
+    # Document frequency, the number of documents with this word. Considers title only.
+    # """
+
+
+class PageWord(Model):
+    """
+    A page—word pair.
+    """
+
+    class Meta(Model.Meta):
+        """
+        Model metadata.
+        """
+
+        abstract = True
+        indexes = (("page", "word"),)
+        unique_together = (("page", "word"),)
+
+    id = BigIntField(generated=True, index=True, pk=True, unique=True)
+    """
+    ID.
+    """
+
+    page: ForeignKeyRelation[Page] = ForeignKeyField(
+        f"{APP_NAME}.{Page.__name__}", index=True, on_delete=RESTRICT
+    )
+    """
+    The page the word is on.
+    """
+
+    word: ForeignKeyRelation[Word] = ForeignKeyField(
+        f"{APP_NAME}.{Word.__name__}", index=True, on_delete=RESTRICT
+    )
+    """
+    The word.
+    """
+
+    positions: OneToOneNullableRelation["WordPositions"]
+    """
+    Word positions for plaintext.
+    """
+
+    positions_title: OneToOneNullableRelation["WordPositionsTitle"]
+    """
+    Word positions for title.
+    """
+
 
 class WordPositions(Model):
     """
@@ -309,29 +336,26 @@ class WordPositions(Model):
         indexes = (("key"),)
         unique_together = (("key",),)
 
-    id = BigIntField(generated=True, index=True, pk=True, unique=True)
-    """
-    ID.
-    """
-
-    key: OneToOneRelation["PageWord"]
+    key: OneToOneRelation[PageWord] = OneToOneField(
+        f"{APP_NAME}.{PageWord.__name__}", related_name="positions", on_delete=CASCADE
+    )
     """
     Corresponding page pair.
     """
 
-    positions = TextField(
-        validators=(RegexValidator(r"\A(?:|\d+(?:,\d+)*)\Z", NOFLAG),)
-    )
+    positions = TextField(validators=(CommaSeparatedIntegerListValidator(),))
     """
     Positions of the word occurrence on a page.
+
+    Must not be empty, which is enforced by `CommaSeparatedIntegerListValidator`.
     """
 
-    frequency = BigIntField(validators=(MinValueValidator(0),))
+    frequency = BigIntField(validators=(MinValueValidator(1),))
     """
     Frequency of the word in the page.
     """
 
-    tf = FloatField(validators=(MinValueValidator(0), MaxValueValidator(1)))
+    tf_normalized = FloatField(validators=(MinValueValidator(0), MaxValueValidator(1)))
     """
     Term frequency in the page, normalized.
     
@@ -351,49 +375,13 @@ class WordPositionsTitle(WordPositions):
 
         abstract = True
 
-
-class PageWord(Model):
-    """
-    A page—word pair.
-    """
-
-    class Meta(Model.Meta):
-        """
-        Model metadata.
-        """
-
-        abstract = True
-        indexes = (("page", "word"),)
-        unique_together = (("page", "word"),)
-
-    page: ForeignKeyRelation[Page] = ForeignKeyField(
-        f"{APP_NAME}.{Page.__name__}", index=True, on_delete=RESTRICT
+    key: OneToOneRelation[PageWord] = OneToOneField(
+        f"{APP_NAME}.{PageWord.__name__}",
+        related_name="positions_title",
+        on_delete=CASCADE,
     )
     """
-    The page the word is on.
-    """
-
-    word: ForeignKeyRelation[Word] = ForeignKeyField(
-        f"{APP_NAME}.{Word.__name__}", index=True, on_delete=RESTRICT
-    )
-    """
-    The word.
-    """
-
-    positions: OneToOneRelation[WordPositions] = OneToOneField(
-        f"{APP_NAME}.{WordPositions.__name__}", related_name="key", on_delete=RESTRICT
-    )
-    """
-    Word positions for plaintext.
-    """
-
-    positions_title: OneToOneRelation[WordPositionsTitle] = OneToOneField(
-        f"{APP_NAME}.{WordPositionsTitle.__name__}",
-        related_name="key",
-        on_delete=RESTRICT,
-    )
-    """
-    Word positions for title.
+    Corresponding page pair.
     """
 
 
