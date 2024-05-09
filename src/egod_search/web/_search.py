@@ -36,10 +36,7 @@ def search():
     """
     Search page.
     """
-    layout("Search")
-
-    input_field = ui.input("Search query")
-    indexed_how_many_pages = ui.label()
+    
 
     class TFDict(TypedDict):
         id: str
@@ -120,7 +117,7 @@ def search():
                             rows=rows,  # type: ignore
                             row_key="id",
                         )
-        ui.button("Show TFxIDF/max(TF) calculation info", on_click=dialog.open)
+        ui.button("Show TFxIDF/max(TF) calculation", on_click=dialog.open)
 
     class VectorSpaceDict(TypedDict):
         __id: str
@@ -190,7 +187,7 @@ def search():
                 rows=rows,  # type: ignore
                 row_key="id",
             )
-        ui.button("Show Vector Space info", on_click=dialog.open)
+        ui.button("Show Vector Space", on_click=dialog.open)
 
     class Page(TypedDict):
         title: str
@@ -221,11 +218,10 @@ def search():
         if page == None:
             page = 1
         arr_info_show_all_pages_cache = arr_info
-        ui.label(f"{len(arr_info)} results")
         maximum_items_in_page = 50
         how_many_pages = len(arr_info) // maximum_items_in_page + 1
         p = ui.pagination(1, how_many_pages, value=page, direction_links=True, on_change=lambda x: show_all_pages.refresh(arr_info_show_all_pages_cache, p.value))
-        ui.label().bind_text_from(p, 'value', lambda v: f'Page {v}: Results {(v - 1) * maximum_items_in_page + 1} - {min(v * maximum_items_in_page, len(arr_info))}')
+        ui.label().bind_text_from(p, 'value', lambda v: f'{len(arr_info)} results; page {v}: Results {(v - 1) * maximum_items_in_page + 1} - {min(v * maximum_items_in_page, len(arr_info))}')
         # show only page in the pagination of 50 pages per tab
 
         #print the list index for debugging
@@ -395,8 +391,19 @@ def search():
             )
         show_all_pages.refresh(for_show_all_pages)
 
-    ui.button("Submit", on_click=submission_onclick)
-    show_stems_info()
-    show_vector_space_info()
+    layout("Search")
+
+    # create a full-width ui.card for fitting the input field
+    with ui.card().classes("w-full"):
+        # create row that fills available space
+        with ui.row().classes("w-full items-center"):
+            input_field = ui.input("Search query").classes("grow")
+            # fix the submission_onclick not a local variable error
+            ui.button("Submit", on_click=submission_onclick)
+    indexed_how_many_pages = ui.label("Input query and press submit to search")
+    with ui.row().classes("w-full items-center"):
+        ui.label("Debugging information: ")
+        show_stems_info()
+        show_vector_space_info()
     show_all_pages()
     show_all_pages.refresh()
