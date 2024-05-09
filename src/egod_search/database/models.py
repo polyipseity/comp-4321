@@ -1,14 +1,15 @@
 # -*- coding: UTF-8 -*-
 from asyncio import gather
-from asyncstdlib import tuple as atuple
 from itertools import chain
 from re import NOFLAG
 from typing import NamedTuple, Self, Type, TypeVar, cast
+from numpy import array, float64
 from tortoise import Model
 from tortoise.fields import (
     BigIntField,
     CharField,
     DatetimeField,
+    FloatField,
     ForeignKeyField,
     ForeignKeyNullableRelation,
     ForeignKeyRelation,
@@ -22,7 +23,7 @@ from tortoise.fields import (
     TextField,
 )
 from tortoise.transactions import atomic
-from tortoise.validators import MinValueValidator, RegexValidator
+from tortoise.validators import MaxValueValidator, MinValueValidator, RegexValidator
 
 from .. import NAME
 from ..index import IndexedPage
@@ -153,24 +154,55 @@ class Page(Model):
             models.WordPositions.all().order_by("-id").only("id").first(),
             models.WordPositionsTitle.all().order_by("-id").only("id").first(),
         )
-        wp_base_pk = 1 if wp_max is None else (wp_max.id + 1)
-        wp_base_pk_title = 1 if wp_max_title is None else (wp_max_title.id + 1)
+
+        wp_id_max = 0 if wp_max is None else wp_max.id
         wps_map = {
             word_str: models.WordPositions(
-                id=wp_base_pk + idx, positions=",".join(map(str, wo)), frequency=len(wo)
+                id=idx, positions=",".join(map(str, wo)), frequency=len(wo), tf=0
             )
-            for idx, word_str in enumerate(word_map)
+            for idx, word_str in enumerate(word_map, wp_id_max + 1)
             for wo in (page.word_occurrences.get(word_str, ()),)
         }
+        try:
+            wp_max_freq = max(wps_map.values(), key=lambda item: item.frequency)
+        except ValueError:
+            pass
+        else:
+            if wp_max_freq.frequency != 0:
+                for wp, tf in zip(
+                    wps_map.values(),
+                    array([wp.frequency for wp in wps_map.values()], dtype=float64)
+                    / wp_max_freq.frequency,
+                    strict=True,
+                ):
+                    wp.tf = tf
+
+        wp_id_max_title = 0 if wp_max_title is None else wp_max_title.id
         wps_map_title = {
             word_str: models.WordPositionsTitle(
-                id=wp_base_pk_title + idx,
-                positions=",".join(map(str, wo_t)),
-                frequency=len(wo_t),
+                id=idx, positions=",".join(map(str, wo)), frequency=len(wo)
             )
-            for idx, word_str in enumerate(word_map)
-            for wo_t in (page.word_occurrences_title.get(word_str, ()),)
+            for idx, word_str in enumerate(word_map, wp_id_max_title + 1)
+            for wo in (page.word_occurrences_title.get(word_str, ()),)
         }
+        try:
+            wp_max_freq_title = max(
+                wps_map_title.values(), key=lambda item: item.frequency
+            )
+        except ValueError:
+            pass
+        else:
+            if wp_max_freq_title.frequency != 0:
+                for wp, tf in zip(
+                    wps_map_title.values(),
+                    array(
+                        [wp.frequency for wp in wps_map_title.values()], dtype=float64
+                    )
+                    / wp_max_freq_title.frequency,
+                    strict=True,
+                ):
+                    wp.tf = tf
+
         await gather(
             models.WordPositions.bulk_create(wps_map.values()),
             models.WordPositionsTitle.bulk_create(wps_map_title.values()),
@@ -178,15 +210,13 @@ class Page(Model):
 
         # index words
         await models.PageWord.bulk_create(
-            await atuple(
-                models.PageWord(
-                    page=new_page,
-                    word=word,
-                    positions_id=wps_map[word_str].id,
-                    positions_title_id=wps_map_title[word_str].id,
-                )
-                for word_str, word in word_map.items()
+            models.PageWord(
+                page=new_page,
+                word=word,
+                positions_id=wps_map[word_str].id,
+                positions_title_id=wps_map_title[word_str].id,
             )
+            for word_str, word in word_map.items()
         )
 
         return True
@@ -299,6 +329,13 @@ class WordPositions(Model):
     frequency = BigIntField(validators=(MinValueValidator(0),))
     """
     Frequency of the word in the page.
+    """
+
+    tf = FloatField(validators=(MinValueValidator(0), MaxValueValidator(1)))
+    """
+    Term frequency in the page, normalized.
+    
+    Calculated by (number of occurrences in the page / max number of occurrences of a word in the page).
     """
 
 
