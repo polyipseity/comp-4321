@@ -7,7 +7,7 @@ from argparse import ZERO_OR_MORE, ArgumentParser, Namespace
 from functools import wraps
 from tqdm.auto import tqdm
 from tqdm.contrib.logging import logging_redirect_tqdm
-from typing import AsyncIterator, Callable, Collection
+from typing import AsyncIterator, Callable, Collection, TypedDict
 from yarl import URL
 
 from .. import VERSION
@@ -33,7 +33,7 @@ _LOGGER = getLogger(_PROGRAM)
 async def main(
     urls: Collection[URL],
     *,
-    page_count: int | None,
+    page_count: int,
     database_path: Path,
     summary_path: Path | None,
     summary_count: int,
@@ -50,11 +50,8 @@ async def main(
 
     basicConfig(level=INFO)
     with logging_redirect_tqdm():
-        if page_count is None:
-            page_count = len(urls)
-
         if page_count < 0:
-            raise ValueError(f"Page count must be nonnegative: {page_count}")
+            page_count = len(urls)
         if request_concurrency <= 0:
             raise ValueError(
                 f"Request concurrency must be positive: {request_concurrency}"
@@ -174,6 +171,39 @@ async def main(
             stepper.queue(finalize)
 
 
+class ParserOptionDefaults(TypedDict):
+    """
+    Typing for parser option defaults.
+    """
+
+    page_count: int
+    summary_path: Path | None
+    summary_count: int
+    keyword_count: int
+    link_count: int
+    request_concurrency: int
+    index_concurrency: int
+    database_concurrency: int
+    database_concurrency: int
+    show_progress: bool
+
+
+PARSER_OPTION_DEFAULTS = ParserOptionDefaults(
+    page_count=-1,
+    summary_path=None,
+    summary_count=-1,
+    keyword_count=10,
+    link_count=10,
+    request_concurrency=6,
+    index_concurrency=4,
+    database_concurrency=1,
+    show_progress=True,
+)
+"""
+Default for parser options.
+"""
+
+
 def parser(parent: Callable[..., ArgumentParser] | None = None) -> ArgumentParser:
     """
     Create an argument parser suitable for the main program. Pass a parser as `parent` to make this a subparser.
@@ -203,8 +233,9 @@ def parser(parent: Callable[..., ArgumentParser] | None = None) -> ArgumentParse
         "-n",
         "--page-count",
         type=int,
-        default=None,
-        help="maximum pages to crawl; default number of inputs",
+        default=PARSER_OPTION_DEFAULTS["page_count"],
+        help="maximum pages to crawl, negative means the number of inputs; "
+        f"default {PARSER_OPTION_DEFAULTS['page_count']}",
     )
     parser.add_argument(
         "-d",
@@ -217,56 +248,63 @@ def parser(parent: Callable[..., ArgumentParser] | None = None) -> ArgumentParse
         "-s",
         "--summary-path",
         type=Path,
-        default=None,
+        default=PARSER_OPTION_DEFAULTS["summary_path"],
         help="path to write database summary; default not write",
     )
     parser.add_argument(
         "--summary-count",
         type=int,
-        default=-1,
-        help="maximum number results in summary, negative means all; default -1",
+        default=PARSER_OPTION_DEFAULTS["summary_count"],
+        help="maximum number results in summary, negative means all; "
+        f"default {PARSER_OPTION_DEFAULTS['summary_count']}",
     )
     parser.add_argument(
         "-k",
         "--keyword-count",
         type=int,
-        default=10,
-        help="maximum keywords per result, negative means all; default 10",
+        default=PARSER_OPTION_DEFAULTS["keyword_count"],
+        help="maximum keywords per result, negative means all; "
+        f"default {PARSER_OPTION_DEFAULTS['keyword_count']}",
     )
     parser.add_argument(
         "-l",
         "--link-count",
         type=int,
-        default=10,
-        help="maximum links per result, negative means all; default 10",
+        default=PARSER_OPTION_DEFAULTS["link_count"],
+        help="maximum links per result, negative means all; "
+        f"default {PARSER_OPTION_DEFAULTS['link_count']}",
     )
     parser.add_argument(
         "-c",
         "--request-concurrency",
         type=int,
-        default=6,
+        default=PARSER_OPTION_DEFAULTS["request_concurrency"],
         help="maximum number of concurrent requests, "
-        "the crawling order remains deterministic; default 6",
+        "the crawling order remains deterministic; "
+        f"default {PARSER_OPTION_DEFAULTS['request_concurrency']}",
     )
     parser.add_argument(
         "--index-concurrency",
         type=int,
-        default=4,
+        default=PARSER_OPTION_DEFAULTS["index_concurrency"],
         help="maximum number of concurrent indexing, "
-        "the indexing order remains deterministic; default 4",
+        "the indexing order remains deterministic; "
+        f"default {PARSER_OPTION_DEFAULTS['index_concurrency']}",
     )
     parser.add_argument(
         "--database-concurrency",
         type=int,
-        default=1,
+        default=PARSER_OPTION_DEFAULTS["database_concurrency"],
         help="maximum number of concurrent database write, "
-        "a value of more than 1 makes the database order nondeterministic; default 1",
+        "a value of more than 1 makes the database order nondeterministic; "
+        f"default {PARSER_OPTION_DEFAULTS['database_concurrency']}",
     )
     parser.add_argument(
         "--no-progress",
-        action="store_false",
+        action=f"store_{str(not PARSER_OPTION_DEFAULTS["show_progress"]).casefold()}",
         dest="show_progress",
-        help="disable showing progress; default enable",
+        help="disable showing progress; "
+        f"default {str(PARSER_OPTION_DEFAULTS['show_progress']).lower()}",
     )
 
     @wraps(main)
