@@ -111,6 +111,11 @@ class Page(Model):
 
         abstract = True
 
+    id = BigIntField(generated=True, index=True, pk=True, unique=True)
+    """
+    Page ID.
+    """
+
     url: OneToOneRelation[URL] = OneToOneField(
         f"{APP_NAME}.{URL.__name__}",
         related_name="page",
