@@ -198,7 +198,7 @@ class Page(Model):
             chain(page.word_occurrences, page.word_occurrences_title), "content"
         )
 
-        # create word—page pairs
+        # create page—word pairs
         pw_max_id = (
             await models.PageWord.annotate(_ret=Max("id", 0))
             .only("_ret")
