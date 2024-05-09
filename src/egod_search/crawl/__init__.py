@@ -2,6 +2,7 @@
 from functools import partial
 from aiohttp import ClientResponse, ClientSession
 from asyncio import QueueEmpty
+from aiohttp_retry import ExponentialRetry, RetryClient
 from bs4 import BeautifulSoup, SoupStrainer, Tag
 from types import TracebackType
 from typing import (
@@ -65,7 +66,11 @@ class Crawler:
         self._queue: MutableSequence[URL] = []
         self._queued: MutableSet[URL] = set()
 
-        self._session = ClientSession()
+        self._session = RetryClient(
+            client_session=ClientSession(),
+            retry_options=ExponentialRetry(),
+            raise_for_status=True,
+        )
 
     async def __aenter__(self) -> Self:
         """
@@ -140,7 +145,7 @@ class Crawler:
         Raises `CrawlError` if an exception occurs.
         """
         try:
-            async with self._session.get(url) as response:
+            async with self._session.get(url, allow_redirects=True) as response:
                 content = await response.read()
             if (
                 not response.ok
