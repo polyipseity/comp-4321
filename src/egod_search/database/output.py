@@ -38,9 +38,7 @@ async def summary(
         tmp = (
             models.Page.all()
             .order_by("id")
-            .prefetch_related(
-                Prefetch("url", models.URL.all().only("page_id", "content"))
-            )
+            .prefetch_related(Prefetch("url", models.URL.all().only("id", "content")))
         )
         async for page in tmp.limit(count) if count >= 0 else tmp:
             fp.write(page_separator)
@@ -62,11 +60,11 @@ async def summary(
                 models.PageWord.filter(page=page)
                 .annotate(
                     frequency=RawSQL(
-                        f"(SELECT frequency FROM {models.WordPositions._meta.db_table} WHERE id = positions_id)"  # type: ignore
+                        f"coalesce((SELECT frequency FROM {models.WordPositions._meta.db_table} WHERE key_id = {models.PageWord._meta.db_table}.id), 0)"  # type: ignore
                     )
                     + RawSQL(
-                        f"(SELECT frequency FROM {models.WordPositionsTitle._meta.db_table} WHERE id = positions_title_id)"  # type: ignore
-                    )
+                        f"coalesce((SELECT frequency FROM {models.WordPositionsTitle._meta.db_table} WHERE key_id = {models.PageWord._meta.db_table}.id), 0)"  # type: ignore
+                    ),
                 )
                 .order_by("-frequency", "word__content")
                 .prefetch_related(
