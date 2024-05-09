@@ -68,7 +68,7 @@ class Crawler:
 
         self._session = RetryClient(
             client_session=ClientSession(),
-            retry_options=ExponentialRetry(),
+            retry_options=ExponentialRetry(attempts=10),
             raise_for_status=True,
         )
 

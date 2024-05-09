@@ -4,7 +4,7 @@ from importlib.resources import files
 from os import getenv
 from typing import TypedDict
 from anyio import Path
-from asyncio import Lock, create_subprocess_exec, gather, to_thread
+from asyncio import Lock, create_subprocess_exec, gather, sleep, to_thread
 from asyncio.subprocess import DEVNULL
 from re import MULTILINE, compile
 from sys import executable, stderr, stdout
@@ -36,6 +36,7 @@ class MainTestCase(AsyncTestCase):
     _SERVER_DIRECTORY = (
         Path(__file__).parent / "../../../examples/comp4321-hkust.github.io/testpages/"
     )
+    _SERVER_START_TIME = 2
     _SERVER_URL = URL("http://localhost:8000/testpage.htm")
     _DATABASE_FILENAME = "database.db"
     _SUMMARY_FILENAME = "summary.txt"
@@ -61,6 +62,7 @@ class MainTestCase(AsyncTestCase):
             stdout=stdout if ci else DEVNULL,
             stderr=stderr if ci else DEVNULL,
         )
+        await sleep(self._SERVER_START_TIME)  # wait for the server to start
 
         return ret
 
