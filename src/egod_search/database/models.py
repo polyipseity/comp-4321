@@ -204,7 +204,7 @@ class Page(Model):
             .only("_ret")
             .get()
             .values_list("_ret", flat=True)
-        )
+        ) or 0
         assert isinstance(pw_max_id, int)
         page_word_map = {
             word: models.PageWord(
