@@ -1,12 +1,13 @@
 # -*- coding: UTF-8 -*-
 from datetime import datetime, timezone
 from importlib.resources import files
+from os import getenv
 from typing import TypedDict
 from anyio import Path
 from asyncio import Lock, create_subprocess_exec, gather, to_thread
 from asyncio.subprocess import DEVNULL
 from re import MULTILINE, compile
-from sys import executable
+from sys import executable, stderr, stdout
 from tempfile import TemporaryDirectory
 from unittest import main
 
@@ -44,6 +45,8 @@ class MainTestCase(AsyncTestCase):
     # @override
     async def asyncSetUp(self) -> None:
         ret = await super().asyncSetUp()
+
+        ci = getenv("CI") == "true"
         self._lock = Lock()
         self._server_process = await create_subprocess_exec(
             executable,
@@ -55,9 +58,10 @@ class MainTestCase(AsyncTestCase):
             "--directory",
             self._SERVER_DIRECTORY,
             stdin=DEVNULL,
-            stdout=DEVNULL,
-            stderr=DEVNULL,
+            stdout=stdout if ci else DEVNULL,
+            stderr=stderr if ci else DEVNULL,
         )
+
         return ret
 
     async def asyncTearDown(self) -> None:
