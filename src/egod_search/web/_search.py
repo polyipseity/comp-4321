@@ -163,6 +163,7 @@ def search():
             with ui.row().classes("w-full"):
                 ui.label("1").classes("text-4xl")
                 ui.label(each_info["title"]).classes("text-2xl")
+                ui.link(each_info["url"])
                 ui.label("Size: " + each_info["size"])
                 ui.label("Time: " + each_info["mod_time"])
             with ui.column().classes("w-full"):
@@ -192,7 +193,9 @@ def search():
                 dict_info["notfound"] = True
                 output_to_call_function.append(dict_info)
                 continue
-            each_page_tf = {}
+            
+            
+            """each_page_tf = {}
             res = (
                 await MODELS.PageWord.filter(word=mget)
                 .annotate(sum=Sum("frequency"))
@@ -230,14 +233,26 @@ def search():
                     dict_info["tf_dict"][page_id_to_norm]["tf"]
                     / res_norm[0]["frequency"]
                 )
-                each_page_tf[page_id_to_norm] /= res_norm[0]["frequency"]
+                each_page_tf[page_id_to_norm] /= res_norm[0]["frequency"]"""
                 # for x in res:
             # print("After norm")
             # print(each_page_tf)
+            res_get_new_tf = await MODELS.WordPositions.filter(key__word__content = stem_raw).values("tf", "key__page__id")
+
+            for each_elem in res_get_new_tf:
+                print(each_elem)
+                dict_info["tf_dict"][each_elem["key__page__id"]] = dict_info["tf_dict"].get(each_elem["key__page__id"], {})
+                dict_info["tf_dict"][each_elem["key__page__id"]]["tfnorm"] = each_elem["tf"]
+
+            page_ids_in_dict = list(dict_info["tf_dict"].keys())
+            #patching!!!
+
+            each_page_tf = ["PATCH"]
+
             word_idf = log2(len(page_ids) / len(each_page_tf))
             dict_info["df"] = len(each_page_tf)
             dict_info["idf"] = log2(len(page_ids) / len(each_page_tf))
-            tfxidf = {k: v * word_idf for k, v in each_page_tf.items()}
+            # tfxidf = {k: v * word_idf for k, v in each_page_tf.items()}
             for page_id_calc_tfxidf in page_ids_in_dict:
                 dict_info["tf_dict"][page_id_calc_tfxidf]["tfxidf_div_maxtf"] = (
                     dict_info["tf_dict"][page_id_calc_tfxidf]["tfnorm"]
@@ -296,6 +311,7 @@ def search():
                     "size": res_each_page[0]["size"],
                     "mod_time": res_each_page[0]["mod_time"],
                     "plaintext": res_each_page[0]["plaintext"],
+                    "url": res_each_page[0]["url__content"]
                 }
             )
         show_all_pages.refresh(for_show_all_pages)
