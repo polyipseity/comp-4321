@@ -1,5 +1,6 @@
 # -*- coding: UTF-8 -*-
 from asyncio import gather
+from enum import StrEnum
 from itertools import chain
 from typing import NamedTuple, Self, Type, TypeVar, cast
 from tortoise import Model
@@ -325,9 +326,40 @@ class PageWord(Model):
     """
 
 
+class WordPositionsType(StrEnum):
+    """
+    Type of word positions.
+    """
+
+    __slots__ = ()
+
+    PLAINTEXT = "plaintext"
+    """
+    Represents word positions in plaintext.
+    """
+    TITLE = "title"
+    """
+    Represents word positions in title.
+    """
+
+    def model(self, models: "Models") -> type["WordPositions"]:
+        match self:
+            case self.PLAINTEXT:
+                return models.WordPositions
+            case self.TITLE:
+                return models.WordPositionsTitle
+            case _:  # type: ignore
+                raise ValueError(self)
+
+
 class WordPositions(Model):
     """
     Word positions for a page—word pair.
+    """
+
+    TYPE = WordPositionsType.PLAINTEXT
+    """
+    Type of word positions.
     """
 
     class Meta(Model.Meta):
@@ -372,6 +404,11 @@ class WordPositions(Model):
 class WordPositionsTitle(WordPositions):
     """
     Word positions for a page—word pair. For titles.
+    """
+
+    TYPE = WordPositionsType.TITLE
+    """
+    Type of word positions.
     """
 
     class Meta(WordPositions.Meta):
