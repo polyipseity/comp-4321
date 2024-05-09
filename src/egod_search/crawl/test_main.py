@@ -39,9 +39,10 @@ class MainTestCase(AsyncTestCase):
     _DATABASE_FILENAME = "database.db"
     _SUMMARY_FILENAME = "summary.txt"
 
+    maxDiff = None
+
     # @override
     async def asyncSetUp(self) -> None:
-        self.maxDiff = None
         ret = await super().asyncSetUp()
         self._lock = Lock()
         self._server_process = await create_subprocess_exec(
