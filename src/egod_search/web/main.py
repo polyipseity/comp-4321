@@ -103,10 +103,11 @@ def layout(title: str) -> None:
     ) as left_drawer:
         ui.button("Home", on_click=lambda: ui.navigate.to("/"))
         ui.button("Search", on_click=lambda: ui.navigate.to("/search"))
+        ui.button("Debug", on_click=lambda: ui.navigate.to("/debug"))
 
 
 @ui.page("/")
-def index():
+def index() -> None:
     """
     Index page.
     """
@@ -128,6 +129,7 @@ if __name__ in {"__main__", "__mp_main__"}:
 
     app.on_startup(on_startup)  # type: ignore
     app.on_shutdown(on_shutdown)  # type: ignore
+    import _debug as _debug  # type: ignore
     import _search as _search  # type: ignore
 
     ui.run()
