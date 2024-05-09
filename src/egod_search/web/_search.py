@@ -9,8 +9,8 @@ from tortoise.functions import Sum
 
 
 def cosine_distance(list1: Sequence[float], list2: Sequence[float]):
-    if len(list1) == 1:
-        return 1 / list1[0]
+    """if len(list1) == 1:
+        return 1 / list1[0]"""
 
     # Calculate dot product
     dot_product = sum(x * y for x, y in zip(list1, list2))
@@ -38,7 +38,7 @@ def search():
     """
     layout("Search")
 
-    input_field = ui.input("List of keywords, by comma")
+    input_field = ui.input("Search query")
     indexed_how_many_pages = ui.label()
 
     class TFDict(TypedDict):
@@ -89,6 +89,12 @@ def search():
                                 "sortable": True,
                             },
                             {
+                                "name": "tfnorm",
+                                "label": "TF (norm.)",
+                                "field": "tfnorm",
+                                "sortable": True,
+                            },
+                            {
                                 "name": "tfxidf_div_maxtf",
                                 "label": "TFxIDF/max(TF)",
                                 "field": "tfxidf_div_maxtf",
@@ -98,7 +104,16 @@ def search():
                         rows = list[TFDict]()
                         for k, v in dict_info["tf_dict"].items():
                             v["id"] = k
+                            # use a loop to round all integer/float fields in v
+                            for key in v.keys():
+                                # specifically, tf and maxtf are supposed to be integers
+                                if key in ["tf", "maxtf"]:
+                                    v[key] = int(v[key])
+                                elif key != "id":
+                                    v[key] = round(v[key], 5)
                             rows.append(v)
+
+                        
                         print(rows)
                         ui.table(
                             columns=columns,
@@ -126,6 +141,9 @@ def search():
             },
         ]
         for stemwords in list(vector_space_dict.values())[0].keys():
+            # but don't do that if it is "__cos" nor "__mag"
+            if stemwords in ["__cos", "__mag"]:
+                continue
             columns.append(
                 {
                     "name": stemwords,
@@ -144,14 +162,29 @@ def search():
                 "sortable": True,
             }
         )
+        # create also an entry for __mag
+        columns.append(
+            {
+                "name": "__mag",
+                "label": "Magnitude (tirbreaker)",
+                "field": "__mag",
+                "required": True,
+                "align": "left",
+                "sortable": True,
+            }
+        )
         rows = list[VectorSpaceDict]()
         for k, v in vector_space_dict.items():
             v["__id"] = k
+            # use a loop to round all integer/float fields in v
+            for key in v.keys():
+                if key != "__id":
+                    v[key] = round(v[key], 5)
             rows.append(v)
         print("debug vector space table")
         print(columns)
         print(rows)
-        with ui.dialog() as dialog, ui.card():
+        with ui.dialog().classes("w-full") as dialog, ui.card():
             ui.table(
                 columns=columns,
                 rows=rows,  # type: ignore
@@ -170,25 +203,56 @@ def search():
             with ui.row().classes("w-full"):
                 ui.label("1").classes("text-4xl")
                 ui.label(each_info["title"]).classes("text-2xl")
-                ui.link(each_info["url"])
+                ui.link(each_info["url"], target=each_info["url"])
                 ui.label("Size: " + str(each_info["size"]))
                 ui.label("Time: " + str(each_info["mod_time"]))
             with ui.column().classes("w-full"):
                 with ui.scroll_area().classes("w-full h-32 border"):
                     ui.label(each_info["plaintext"][:339])
-
+    global arr_info_show_all_pages_cache
+    arr_info_show_all_pages_cache = None
     @ui.refreshable
-    def show_all_pages(arr_info: Sequence[Page] | None = None):
-        if arr_info is None:
+    def show_all_pages(arr_info: Sequence[Page] | None = None, page = None):
+        global arr_info_show_all_pages_cache
+        if arr_info is not None:
+            arr_info_show_all_pages_cache = arr_info
+        if arr_info_show_all_pages_cache is None:
             return
-        for each_info in arr_info:
+        if page == None:
+            page = 1
+        arr_info_show_all_pages_cache = arr_info
+        ui.label(f"{len(arr_info)} results")
+        maximum_items_in_page = 50
+        how_many_pages = len(arr_info) // maximum_items_in_page + 1
+        p = ui.pagination(1, how_many_pages, value=page, direction_links=True, on_change=lambda x: show_all_pages.refresh(arr_info_show_all_pages_cache, p.value))
+        ui.label().bind_text_from(p, 'value', lambda v: f'Page {v}: Results {(v - 1) * maximum_items_in_page + 1} - {min(v * maximum_items_in_page, len(arr_info))}')
+        # show only page in the pagination of 50 pages per tab
+
+        #print the list index for debugging
+        print("Page", page)
+        print((page - 1) * maximum_items_in_page,page * maximum_items_in_page)
+        arr_info_pertab = arr_info[(page - 1) * maximum_items_in_page:page * maximum_items_in_page]
+        print(arr_info_pertab)
+        for each_info in arr_info_pertab:
             show_each_page(each_info)
 
     async def submission_onclick():
         output_to_call_function = []
         page_ids = [x["id"] for x in await MODELS.Page.all().values("id")]
         indexed_how_many_pages.text = f"Finding from {len(page_ids)} pages"
-        for stem_raw in input_field.value.lower().split(","):
+
+        input_value_for_processing = input_field.value
+        # Look for phrases in the input field which are surrounded by double quotes, which needs special attention. It is stored in phrase variable
+        try:
+            _, phrase, _ = input_value_for_processing.split('"', 2)
+            input_value_for_processing.replace('"', "")
+        except:
+            phrase = None
+
+        # find raw stem words in the input field splitted by SPACE CHARACTER 
+        splitted_terms = input_value_for_processing.split(" ")
+
+        for stem_raw in splitted_terms:
             dict_info = {}
             dict_info["stem_original"] = stem_raw
             stem = porter(stem_raw.strip())
@@ -244,23 +308,24 @@ def search():
                 # for x in res:
             # print("After norm")
             # print(each_page_tf)
-            res_get_new_tf = await MODELS.WordPositions.filter(key__word__content = stem_raw).values("tf_normalized", "frequency", "key__page__id")
+            res_get_new_tf = await MODELS.WordPositions.filter(key__word__content = stem).values("tf_normalized", "frequency", "key__page__id")
 
             for each_elem in res_get_new_tf:
                 print(each_elem)
                 dict_info["tf_dict"][each_elem["key__page__id"]] = dict_info["tf_dict"].get(each_elem["key__page__id"], {})
                 dict_info["tf_dict"][each_elem["key__page__id"]]["tfnorm"] = each_elem["tf_normalized"]
-                dict_info["tf_dict"][each_elem["key__page__id"]]["frequency"] = each_elem["frequency"]
+                dict_info["tf_dict"][each_elem["key__page__id"]]["tf"] = each_elem["frequency"]
                 dict_info["tf_dict"][each_elem["key__page__id"]]["maxtf"] = each_elem["frequency"] / each_elem["tf_normalized"]
 
             page_ids_in_dict = list(dict_info["tf_dict"].keys())
             #patching!!!
 
+            df = len(dict_info["tf_dict"].values())
             each_page_tf = ["PATCH"]
 
-            word_idf = log2(len(page_ids) / len(each_page_tf))
-            dict_info["df"] = len(each_page_tf)
-            dict_info["idf"] = log2(len(page_ids) / len(each_page_tf))
+            word_idf = log2(len(page_ids) / df)
+            dict_info["df"] = df
+            dict_info["idf"] = log2(len(page_ids) / df)
             # tfxidf = {k: v * word_idf for k, v in each_page_tf.items()}
             for page_id_calc_tfxidf in page_ids_in_dict:
                 dict_info["tf_dict"][page_id_calc_tfxidf]["tfxidf_div_maxtf"] = (
