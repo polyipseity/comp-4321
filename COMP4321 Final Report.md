@@ -1,5 +1,9 @@
 # Overall design of the System
-The search engine is written in Python. Building the source code produces a website...................................................................................
+
+We separated the system into different modules: crawl containing the crawler, database containing the database models and database saver, index containing the indexer that processes raw web pages into word occurrences and frequencies, query containing the query parser when retrieving, res containing the stop-words and words.txt for Porter's algorithm testing, retrieve containing the retrieval algorithm and web for the web interface. 
+
+The program is written in Python and has two entry points, for the crawler and the web interface respectively. The crawler entry point runs the crawler and the indexer, saving to the database with a summary file. The web interface entry point provides a web interface for querying the database through the query parser and retrieval algorithm.
+
 # File structures used in index database
 ![database.svg](attachments/database.svg)
 
@@ -7,81 +11,71 @@ The search engine is written in Python. Building the source code produces a webs
 
 For precise communication, we would need consistent names. We used these two names consistently:
 
-* `rowid` indicates the integer ID of an item. It is the primary key of each table so cannot be null.
+* `id` indicates the integer ID of an item. It is the primary key of each table so cannot be null.
 * `content` is the item
 
-For example, in the URL-to-ID table, `rowid` is the URL ID, and `content` is the URL.
+For example, in the URL-to-ID table, `id` is the URL ID, and `content` is the URL.
 
-## URL-to-ID table `main.urls`
-
-### Fields
+## URL-to-ID table `url`
 
 Field name | Type | Can be null? | Indexed for efficient search? | Description
 -----------|------|--------------|----------|-------------
-rowid      | Integer (Primary key) | No | Yes (Automatic for primary key, for searching URL) | URL ID of each unique URL
+id      | Integer (Primary key) | No | Yes (Automatic for primary key, for searching URL) | URL ID of each unique URL
 content    | Text | No | Yes (for searching URL ID) | Unique URL
 redirect_id | Integer (Foreign key - another URL ID) | Yes (Default value) | No | the URL redirected to by this page (unused for now)
 
-## Word-to-ID table `main.words`
-
-### Fields
+## Word-to-ID table `word`
 
 Field name | Type | Can be null? | Indexed for efficient search? | Description
 -----------|------|--------------|----------|-------------
-rowid      | Integer (Primary key) | No | Yes (Automatic for primary key, for searching Word) | Word ID of each unique Word
+id      | Integer (Primary key) | No | Yes (Automatic for primary key, for searching Word) | Word ID of each unique Word
 content    | Text | No | Yes (for searching Word ID) | Unique Word
 
-## Page information table `main.pages`
-
-### Fields
+## Page information table `page`
 
 Field name | Type | Can be null? | Indexed for efficient search? | Description
 -----------|------|--------------|----------|-------------
-rowid      | Integer (Primary key and Foreign key - URL ID) | No | Yes (Automatic for primary key - for searching page information) | URL ID of the page
+id      | Integer (Primary key) | No | Yes (Automatic for primary key - for searching page information) | URL ID of the page
 mod_time   | Integer | No | No | UNIX timestamp in seconds: Last modified time in HTTP header if available, or the time of scraping otherwise.
-size   | Integer | No | No | Size in bytes: Size of page in HTTP header if available, or the size of plain text (without HTML tags) otherwise. Must be greater than or equal to 0.
+size   | Integer | No | No | Size in bytes: Size of page in HTTP header if available, or the size of plain text (without HTML tags) otherwise. Validated on the Python side to be at least 0.
 text   | Text | No | No | Complete page with HTML tags
 plaintext   | Text | No | No | Plain human-readable text without HTML tags
 title   | Text | No | No | Title of the page
-links   | Text | No | No | Sorted JSON list of unique URL IDs linked by this page. It is simpler on the application side not to create a whole new table just for storing links, but this also means complications on the database side. Specifically, we use triggers as seen below.
+url_id | Integer (Foreign key - URL ID) | No | No | The URL ID associated with this page. Each page must have an associated URL but a URL might not have an associated Page.
+links????????????????????????? | Text | No | No | Sorted JSON list of unique URL IDs linked by this page. It is simpler on the application side not to create a whole new table just for storing links, but this also means complications on the database side?????????????????????????
 
-### Triggers for links
+## Page-word combination table `pageword`
 
-Since we did not use a table for storing links, we need to use triggers manually ensure data validity instead of just using `ON UPDATE CASCADE ON DELETE RESTRICT` which would only update database-known primary keys - foreign key pairs instead of also updating our links.
-
-For the equivalent of `ON UPDATE CASCADE`, when a `rowid` updates, we would replace any references to the old `rowid` inside the `links` column with the new one.
-
-For the equivalent of `ON DELETE RESTRICT`, when a `rowid` is about to be deleted, we check for any references to this `rowid` inside the `links` column, and abort with error if found.
-
-When we insert or update `links` values, we:
-
-1. Check that it is valid JSON
-2. Check that all elements are integers
-3. Check that there are no duplicate values
-4. Check that it is a sorted list
-5. Check that each element is a valid URL ID
-
-## Word occurrences for each page `main.word_occurrences` & `main.word_occurrences_title`
-
-> `main.word_occurrences_title` is used for storing word occurrences in the title.
-> `main.word_occurrences` is used for storing word occurrences outside of the title.
+The Tortoise library does not support user-defined composite primary keys. As a result, we need to work around with a new table that provides a new set of singular keys for later use by the word occurrences for each page table.
 
 Field name | Type | Can be null? | Indexed for efficient search? | Description
 -----------|------|--------------|----------|-------------
-page_id      | Integer (Composite Primary key and Foreign key - URL ID) | No | Yes (Automatic for primary key - for searching positions and frequencies) | URL ID of the page
+id         | Integer (Primary key) | No | Yes (Automatic for primary key) | ID of the Page-word combination
+page_id    | Integer (Foreign key - Page ID) | No | No | Page ID of the Page-word combination
+word_id    | Integer (Foreign key - Word ID) | No | No | Word ID of the Page-word combination
+
+## Word occurrences for each page `wordpositions` & `wordpositionstitle`
+
+`wordpositionstitle` is used for storing word occurrences in the <title> tag of the Page.
+`wordpositions` is used for storing word occurrences outside of the <title> tag of the Page.
+
+Field name | Type | Can be null? | Indexed for efficient search? | Description
+-----------|------|--------------|----------|-------------
+id      | Integer (Primary key) | No | Yes (Automatic for primary key) | ID of the word occurrence.
 word_id   | Integer (Composite Primary key and Foreign key - Word ID) | No | Yes (Automatic for primary key - for searching positions and frequencies) | Word ID of the word
-positions   | Text | No | No | Sorted JSON list of unique nonnegative word positions. Again, using JSON instead of another table simplifies application side but complicates database side. Specifically, we use triggers as seen below.
-frequency   | Integer | No | No | Computed frequency of the word in question in the page. Since lookup occurs much more frequently than scraping, this enables faster lookup, trading for a slower scraping.
+positions   | Text | No | No | List of unique word positions. Validated on the Python side to be comma-separated and nonnegative.
+frequency   | Integer | No | No | Computed frequency of the word in question in the page. Since lookup occurs much more frequently than scraping, this enables faster lookup, trading for a slower scraping. Validated on the Python side to be at least 1.
+tf_normalized | Real number | No | No | Normalized term frequency which is term frequency over the maximum term frequency in the web page. Pre-computed from the frequency column for faster retrieval. Validated on the Python side to be at least 0 and at most 1.
+key_id      | Integer (Foreign key - page-word combination ID) | No | No | ID of the page-word combination associated with this word occurrence.
 
-### Triggers for positions
+## Outlinks table `page_url`
 
-Since `positions` store multiple word positions per row using JSON lists, we need to enforce validity manually. When a `position` value is inserted or deleted, we:
+This table is generated from the many-to-many outlinks relation between Page and Url.
 
-1. Check that it is valid JSON
-2. Check that all elements are integers
-3. Check that there are no duplicate values
-4. Check that there are no negative values
-5. Check that it is a sorted list
+Field name | Type | Can be null? | Indexed for efficient search? | Description
+-----------|------|--------------|----------|-------------
+page_id     | Integer (Composite primary key, Foreign key - Page ID) | No | Yes (Automatic for primary key) | Page ID where this outlink points from.
+url_id      | Integer (Composite primary key, Foreign key - Url ID) | No | Yes (Automatic for primary key) | Url ID where this outlink points to.
 
 # Algorithms used
 
@@ -92,17 +86,35 @@ When each page is crawled, the `Crawler.crawl` method in `src/egod_search/crawl/
 
 The main algorithm for deciding which pages to crawl is the Breadth First Search in `ConcurrentCrawler.run` of `src/egod_search/crawl/concurrency.py`. From the first requested page, we enqueue all outlinks, then crawl each dequeued page, with all outlinks enqueued. This is done until `page_count` (`-n` argument) is reached. Each crawled page is stored as in-memory objects of class `UnindexedPage` defined at `src/egod_search/index/__init__.py` and saved to the database sequentially with locking since SQLite does not support concurrent writing. Most of the code in the crawler relate to concurrency to speed up crawling. 
 
-## Indexer
+## Indexer - Text transformation and collection of word occurrences
 
-The indexer is a converter from `UnindexedPage` to `IndexedPage`, implemented as the `index_page` function of `src/egod_search/index/__init__.py`. First, 
+The indexer is a converter from `UnindexedPage` to `IndexedPage`, implemented as the `index_page` function of `src/egod_search/index/__init__.py`. First, we extract the `<title>` tag and the page size from the `Content-Length` attribute from the HTTP response.
 
-## Retrieval function
+Then, the text undergoes transformation with the following steps:
+1. Tokenize with `TreebankWordTokenizer` from the `nltk.tokenize` module, and normalized according to:
+2. Normalize the word into Unicode Normalization Compatibility Form D (NFKD). This is for removing diacritics in the next step. Also, very similar looking characters are converted into the normal characters, such as `𝐀` to `A`.
+3. Remove non-alphanumeric characters. This also removes diacritics.
+4. Normalize the word into Unicode Normalization Compatibility Form C (NFKC).  This merges decomposed characters back into their normal form.
+5. Convert to lowercase.
+6. Remove stop-words defined in `src/egod_search/res/stop words.txt`.
+7. Stem according to Porter's stemming algorithm. 
+8. Remove empty words after stemming.
+
+After that, the word occurrences are collected to derive the term frequency of each word and the normalized term frequency from dividing it by the maximum term frequency for later retrieval. 
+
+Finally, the word occurrence, frequency and normalized frequency information are stored. 
+
+## Retrieval function 
 
 ............................................................................................
 
-## Web Interface
+## Web Interface - NiceGUI
 
-............................................................................................
+The web interface is based on the NiceGUI library which provides easy definitions of controls for a nice interface. When the GUI application starts, `layout` of `src/egod_search/web/main.py` is called. There are 3 pages in the left drawer: Home, Search, Debug. The Home page lists usage instructions.
+
+The Search page is the main function - a search bar and a Submit button for querying the search engine. 3 additional buttons provide the calculations used for retrieving results: TFxIDF/max(TF), TFxIDF/max(TF) (title) and Vector space for the use of 3 different page embedding models. 
+
+The Debug page 
 
 # Installation procedure
 
@@ -210,6 +222,24 @@ Linux: Debian 12 on Python 3.11.2 (older Linux distros do not have >= Python 3.1
 Windows: Windows 10 and 11, Python 3.11.2 and 3.12.2
 
 # Highlight of features beyond the required specification
+
+We picked "Exceedingly good speed by using special implementation techinques". Specifically, aside from one lock for the database due to SQLite limitations, we have concurrency for all other parts including the downloader (6 threads by default), database content generation (4 threads by default) and database retrieval (automatically threaded by the Uvicorn web server library). If we used another database that supports concurrent writes, the lock wouldn't be needed.
+
+Exceedingly good speed in the crawler is achieved by asynchronous tasks from the `asyncio` module in Python. When the crawler starts, a `TaskGroup` from `asyncio` is created and populated with asynchronous `Task`s, each waiting on an OS thread to finish network requests. The Python program can process other tasks during this time, speeding up the crawler.
+
+After that, in the index computation, the Python program is overloaded with work to do. Asynchronous tasks will not work here, instead we made a `a_pool_imap` function which creates new Python processes with `Pool` from the `multiprocessing.pool` module. Through multiprocessing, we distribute computation-heavy work across CPU cores to speed up the indexer.
+
+Inside the indexing function, we further speed up the computation using the Numpy library which provides parallel operations on arrays (called "vectorization") instead of coding our own for-loops. The `amax` function is used to obtain the maximum term frequency in the document for pre-computation of normalised term frequency stored as `tf_normalized` in the database for faster retrieval.
+
+Numpy vectorization is further used in retrieval for cosine similarity, and TF-IDF calculation. Instead of calculating element by element, we used numpy to calculate cosine similarity, TF, IDF and TF multiplied by IDF in parallel across many elements to achieve exceedingly good speed in the retrieval. Title similarity for ranking also uses numpy for speed.
+
+## For GUI: Enhanced Real-Time Search Engine Response through WebSocket Connection
+
+WebSocket is a communication protocol that enables bidirectional communication channels over a single TCP connection. Unlike traditional methods that rely on HTML forms and follow a request-response pattern, WebSocket allows for real-time, two-way communication between a client and a server. This persistent connection eliminates the need for repeated requests and excessive HTTP communication overhead, resulting in lower latency and improved responsiveness.
+
+In conventional search engines, search queries are submitted using HTML forms as GET parameters in the HTTP request. However, this approach requires an additional HTTP request, causing the client to clear the current document's head and body in anticipation of receiving new content. As a result, the page momentarily flashes white, creating a visually disruptive experience.
+
+In our search engine, we leverage the NiceGUI framework, which utilizes WebSocket to establish bidirectional communication with the web client. Through this communication channel, the client can submit search queries and receive query results when the server is ready, all within the same connection. During the waiting period, on-screen elements such as the title and buttons remain in the document tree, eliminating any flashing effects.
 
 # Testing of the functions implemented; include screenshots if applicable in the report
 
