@@ -159,7 +159,7 @@ async def tf_idf_many(
     return tf * idf
 
 
-async def cosine_similarity_many(
+def cosine_similarity_many(
     query_vector: NDArray[float64],
     page_vectors: NDArray[float64],
 ) -> NDArray[float64]:
