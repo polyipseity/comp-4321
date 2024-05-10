@@ -1,11 +1,12 @@
 # -*- coding: UTF-8 -*-
-from typing import Mapping, Sequence, TypedDict
-from egod_search.database.models import MODELS
-from egod_search.index.transform import porter
+from typing import Any, Sequence
+from egod_search.database.models import MODELS, Page, WordPositionsType
+from egod_search.query import lex_query, parse_query
+from egod_search.retrieve.search import SearchResultsDebug, search_terms_phrases
 from main import layout  # type: ignore
-from math import log2, sqrt
+from math import sqrt
 from nicegui import ui
-from tortoise.functions import Sum
+from numpy.linalg import norm
 
 
 def cosine_distance(list1: Sequence[float], list2: Sequence[float]):
@@ -32,385 +33,245 @@ def magnitude_of_list(list1: Sequence[float]):
     return sqrt(sum(x**2 for x in list1))
 
 
+def _show_tf_idf(
+    results: SearchResultsDebug | None,
+    type: WordPositionsType = WordPositionsType.PLAINTEXT,
+):
+    if results is None:
+        return
+    with ui.dialog() as dialog, ui.card():
+        with ui.carousel(animated=True, arrows=True, navigation=True).props(
+            "control-color=black"
+        ):
+            stem_idx_map = {stem: idx for idx, stem in enumerate(results.stems)}
+            for term, stem in results.terms.items():
+                with ui.carousel_slide():
+                    ui.label(f'For term "{term}":')
+                    if stem is None:
+                        ui.label("This search term does not have a stem")
+                        continue
+                    stem_idx = stem_idx_map[stem]
+                    ui.label(f"Stem: {stem.content}")
+                    ui.label(f"Document Frequency (DF): {results.idf_raw[stem_idx]}")
+                    ui.label(
+                        f"Inverse Document Frequency (IDF): {results.idf[stem_idx]}"
+                    )
+                    columns = [
+                        {
+                            "name": "id",
+                            "label": "Page ID",
+                            "field": "id",
+                            "required": True,
+                            "align": "left",
+                            "sortable": True,
+                        },
+                        {
+                            "name": "tf",
+                            "label": "TF",
+                            "field": "tf",
+                            "sortable": True,
+                        },
+                        {
+                            "name": "tfnorm",
+                            "label": "TF (norm.)",
+                            "field": "tfnorm",
+                            "sortable": True,
+                        },
+                        {
+                            "name": "tfxidf_div_maxtf",
+                            "label": "TFxIDF/max(TF)",
+                            "field": "tfxidf_div_maxtf",
+                            "sortable": True,
+                        },
+                    ]
+
+                    match type:
+                        case WordPositionsType.PLAINTEXT:
+                            tf, tf_norm, tf_idf = (
+                                results.tf,
+                                results.tf_normalized,
+                                results.tf_idf,
+                            )
+                        case WordPositionsType.TITLE:
+                            tf, tf_norm, tf_idf = (
+                                results.tf_title,
+                                results.tf_normalized_title,
+                                results.tf_idf_title,
+                            )
+                        case _:  # type: ignore
+                            raise ValueError(type)
+                    ui.table(
+                        columns=columns,
+                        row_key="id",
+                        rows=[
+                            {
+                                "id": page.id,
+                                "tf": tf[page_idx][stem_idx],
+                                "tfnorm": tf_norm[page_idx][stem_idx],
+                                "tfxidf_div_maxtf": tf_idf[page_idx][stem_idx],
+                            }
+                            for page_idx, page in enumerate(results.pages)
+                        ],
+                    )
+    ui.button(
+        f"TFxIDF/max(TF){' (title)' if type == WordPositionsType.TITLE else ''}",
+        on_click=dialog.open,
+    )
+
+
+@ui.refreshable
+def show_tf_idf(*args: Any, **kwargs: Any):
+    """
+    Shows TF–IDF details.
+    """
+    _show_tf_idf(*args, **kwargs)
+
+
+@ui.refreshable
+def show_tf_idf_title(*args: Any, **kwargs: Any):
+    """
+    Shows TF–IDF details. For titles.
+    """
+    _show_tf_idf(type=WordPositionsType.TITLE, *args, **kwargs)
+
+
+@ui.refreshable
+def show_vector_space(results: SearchResultsDebug | None):
+    """
+    Show vector space details.
+    """
+    if results is None:
+        return
+    columns = [
+        {
+            "name": "__id",
+            "label": "Page ID",
+            "field": "__id",
+            "required": True,
+            "align": "left",
+        },
+        {
+            "name": "__cos",
+            "label": "Cosine Similarity",
+            "field": "__cos",
+            "required": True,
+            "align": "left",
+            "sortable": True,
+        },
+        {
+            "name": "__mag",
+            "label": "Magnitude (tirbreaker)",
+            "field": "__mag",
+            "required": True,
+            "align": "left",
+            "sortable": True,
+        },
+    ]
+    for stem in results.stems:
+        stem_word = stem.content
+        columns.append(
+            {
+                "name": stem_word,
+                "label": stem_word,
+                "field": stem_word,
+                "sortable": True,
+            }
+        )
+    with ui.dialog().classes("w-full") as dialog, ui.card():
+        ui.table(
+            columns=columns,
+            row_key="__id",
+            rows=[
+                {
+                    "__id": page.id,
+                    "__cos": results.weights[page_idx],
+                    "__mag": norm(results.tf_idf[page_idx]),  # TODO: consider title,
+                    **dict(
+                        zip(
+                            (stem.content for stem in results.stems),
+                            results.tf_idf[page_idx],
+                            strict=True,
+                        )
+                    ),
+                }
+                for page_idx, page in enumerate(results.pages)
+            ],
+        )
+    ui.button("Vector Space", on_click=dialog.open)
+
+
+def _show_page(page: Page):
+    # Remember to prefetch/fetch `url`
+    with ui.card().classes("w-full"):
+        with ui.row().classes("w-full"):
+            ui.label("1").classes("text-4xl")
+            ui.label(page.title).classes("text-2xl")
+            ui.link(page.url.content, target=page.url.content)
+            ui.label(f"Size: {page.size}")
+            ui.label(f"Time: {page.mod_time.isoformat()}")
+        with ui.column().classes("w-full"):
+            with ui.scroll_area().classes("w-full h-32 border"):
+                ui.label(page.plaintext[:339])
+
+
+@ui.refreshable
+def show_pages(pages: Sequence[Page] | None, *, pagination_index: int = 1):
+    """
+    Show all pages. Supports pagination.
+
+    `pagination_index` is 1-based.
+    """
+    if pages is None:
+        return
+    maximum_items_in_page = 50
+    how_many_pages = len(pages) // maximum_items_in_page + 1
+    p = ui.pagination(
+        1,
+        how_many_pages,
+        value=pagination_index,
+        direction_links=True,
+        on_change=lambda: show_pages.refresh(p.value),
+    )
+
+    def binder(pagination_index: int):
+        return f"{len(pages)} results; page {pagination_index}: Results {(pagination_index - 1) * maximum_items_in_page + 1} - {min(pagination_index * maximum_items_in_page, len(pages))}"
+
+    ui.label().bind_text_from(p, "value", binder)
+    # show only page in the pagination of 50 pages per tab
+
+    # print the list index for debugging
+    # print("Page", pagination_index)
+    # print((pagination_index - 1) * maximum_items_in_page, pagination_index * maximum_items_in_page)
+    partitioned_pages = pages[
+        (pagination_index - 1)
+        * maximum_items_in_page : pagination_index
+        * maximum_items_in_page
+    ]
+    # print(partitioned_results)
+    for result in partitioned_pages:
+        _show_page(result)
+
+
 @ui.page("/search")
 def search():
     """
     Search page.
     """
 
-    class TFDict(TypedDict):
-        id: str
-
-    class StemDict(TypedDict):
-        stem: str
-        df: float
-        idf: float
-        tf_dict: Mapping[str, TFDict]
-
-    @ui.refreshable
-    def show_stems_refreshable_element(arr_of_dict: Sequence[StemDict] | None = None):
-        show_stems_info(arr_of_dict)
-
-    @ui.refreshable
-    def show_stems_title_refreshable_element(arr_of_dict: Sequence[StemDict] | None = None):
-        show_stems_info(arr_of_dict, title=True)
-
-    def show_stems_info(arr_of_dict: Sequence[StemDict] | None = None, title = False):
-        if arr_of_dict is None:
-            return
-        with ui.dialog() as dialog, ui.card():
-            with ui.carousel(animated=True, arrows=True, navigation=True).props(
-                "control-color=black"
-            ):
-                for dict_info in arr_of_dict:
-                    with ui.carousel_slide():
-                        ui.label(f"For stem word {dict_info['stem']}:")
-                        if dict_info.get("notfound", False):
-                            ui.label("This stem word is not found!")
-                            continue
-                        ui.label(f"Document Frequency (DF): {dict_info['df']}")
-                        ui.label(
-                            f"Inverse Document Frequency (IDF): {dict_info['idf']}"
-                        )
-                        columns = [
-                            {
-                                "name": "id",
-                                "label": "Page ID",
-                                "field": "id",
-                                "required": True,
-                                "align": "left",
-                            },
-                            {
-                                "name": "tf",
-                                "label": "TF",
-                                "field": "tf",
-                                "sortable": True,
-                            },
-                            {
-                                "name": "maxtf",
-                                "label": "max(TF)",
-                                "field": "maxtf",
-                                "sortable": True,
-                            },
-                            {
-                                "name": "tfnorm",
-                                "label": "TF (norm.)",
-                                "field": "tfnorm",
-                                "sortable": True,
-                            },
-                            {
-                                "name": "tfxidf_div_maxtf",
-                                "label": "TFxIDF/max(TF)",
-                                "field": "tfxidf_div_maxtf",
-                                "sortable": True,
-                            },
-                        ]
-                        rows = list[TFDict]()
-                        for k, v in dict_info["tf_dict"+("_title" if title else '')].items():
-                            v["id"] = k
-                            # use a loop to round all integer/float fields in v
-                            for key in v.keys():
-                                # specifically, tf and maxtf are supposed to be integers
-                                if key in ["tf", "maxtf"]:
-                                    v[key] = int(v[key])
-                                elif key != "id":
-                                    v[key] = round(v[key], 5)
-                            rows.append(v)
-
-                        print(rows)
-                        ui.table(
-                            columns=columns,
-                            rows=rows,  # type: ignore
-                            row_key="id",
-                        )
-        ui.button(f"TFxIDF/max(TF){' (title)' if title else ''}", on_click=dialog.open)
-
-    class VectorSpaceDict(TypedDict):
-        __id: str
-
-    @ui.refreshable
-    def show_vector_space_info(
-        vector_space_dict: Mapping[str, VectorSpaceDict] | None = None
-    ):
-        if vector_space_dict is None:
-            return
-        columns = [
-            {
-                "name": "__id",
-                "label": "Page ID",
-                "field": "__id",
-                "required": True,
-                "align": "left",
-            },
-        ]
-        for stemwords in list(vector_space_dict.values())[0].keys():
-            # but don't do that if it is "__cos" nor "__mag"
-            if stemwords in ["__cos", "__mag"]:
-                continue
-            columns.append(
-                {
-                    "name": stemwords,
-                    "label": stemwords,
-                    "field": stemwords,
-                    "sortable": True,
-                }
-            )
-        columns.append(
-            {
-                "name": "__cos",
-                "label": "Cosine Distance",
-                "field": "__cos",
-                "required": True,
-                "align": "left",
-                "sortable": True,
-            }
+    async def search():
+        query_result = parse_query(lex_query(input_field.value))
+        indexed_how_many_pages.text = (
+            f"Finding from {await MODELS.Page.all().count()} pages"
         )
-        # create also an entry for __mag
-        columns.append(
-            {
-                "name": "__mag",
-                "label": "Magnitude (tirbreaker)",
-                "field": "__mag",
-                "required": True,
-                "align": "left",
-                "sortable": True,
-            }
+
+        search_results = await search_terms_phrases(
+            MODELS, query_result.terms, phrases=query_result.phrases, debug=True
         )
-        rows = list[VectorSpaceDict]()
-        for k, v in vector_space_dict.items():
-            v["__id"] = k
-            # use a loop to round all integer/float fields in v
-            for key in v.keys():
-                if key != "__id":
-                    v[key] = round(v[key], 5)
-            rows.append(v)
-        # print("debug vector space table")
-        # print(columns)
-        # print(rows)
-        with ui.dialog().classes("w-full") as dialog, ui.card():
-            ui.table(
-                columns=columns,
-                rows=rows,  # type: ignore
-                row_key="id",
-            )
-        ui.button("Vector Space", on_click=dialog.open)
 
-    class Page(TypedDict):
-        title: str
-        size: str
-        mod_time: str
-        plaintext: str
-
-    def show_each_page(each_info: Page):
-        with ui.card().classes("w-full"):
-            with ui.row().classes("w-full"):
-                ui.label("1").classes("text-4xl")
-                ui.label(each_info["title"]).classes("text-2xl")
-                ui.link(each_info["url"], target=each_info["url"])
-                ui.label("Size: " + str(each_info["size"]))
-                ui.label("Time: " + str(each_info["mod_time"]))
-            with ui.column().classes("w-full"):
-                with ui.scroll_area().classes("w-full h-32 border"):
-                    ui.label(each_info["plaintext"][:339])
-
-    global arr_info_show_all_pages_cache
-    arr_info_show_all_pages_cache = None
-
-    @ui.refreshable
-    def show_all_pages(arr_info: Sequence[Page] | None = None, page=None):
-        global arr_info_show_all_pages_cache
-        if arr_info is not None:
-            arr_info_show_all_pages_cache = arr_info
-        if arr_info_show_all_pages_cache is None:
-            return
-        if page == None:
-            page = 1
-        arr_info_show_all_pages_cache = arr_info
-        maximum_items_in_page = 50
-        how_many_pages = len(arr_info) // maximum_items_in_page + 1
-        p = ui.pagination(
-            1,
-            how_many_pages,
-            value=page,
-            direction_links=True,
-            on_change=lambda x: show_all_pages.refresh(
-                arr_info_show_all_pages_cache, p.value
-            ),
-        )
-        ui.label().bind_text_from(
-            p,
-            "value",
-            lambda v: f"{len(arr_info)} results; page {v}: Results {(v - 1) * maximum_items_in_page + 1} - {min(v * maximum_items_in_page, len(arr_info))}",
-        )
-        # show only page in the pagination of 50 pages per tab
-
-        # print the list index for debugging
-        print("Page", page)
-        print((page - 1) * maximum_items_in_page, page * maximum_items_in_page)
-        arr_info_pertab = arr_info[
-            (page - 1) * maximum_items_in_page : page * maximum_items_in_page
-        ]
-        print(arr_info_pertab)
-        for each_info in arr_info_pertab:
-            show_each_page(each_info)
-
-    async def submission_onclick():
-        output_to_call_function = []
-        output_to_call_function_title = []
-
-        page_ids = [x["id"] for x in await MODELS.Page.all().values("id")]
-        indexed_how_many_pages.text = f"Finding from {len(page_ids)} pages"
-
-        input_value_for_processing = input_field.value
-        # Look for phrases in the input field which are surrounded by double quotes, which needs special attention. It is stored in phrase variable
-        try:
-            _, phrase, _ = input_value_for_processing.split('"', 2)
-            input_value_for_processing.replace('"', "")
-        except:
-            phrase = None
-
-        # find raw stem words in the input field splitted by SPACE CHARACTER
-        splitted_terms = input_value_for_processing.split(" ")
-
-        for stem_raw in splitted_terms:
-            dict_info = {}
-            dict_info["stem_original"] = stem_raw
-            stem = porter(stem_raw.strip())
-            dict_info["stem"] = stem
-            dict_info["tf_dict"] = {}
-            dict_info["tf_dict_title"] = {}
-            try:
-                mget = await MODELS.Word.get(content=stem)
-            except:
-                dict_info["notfound"] = True
-                output_to_call_function.append(dict_info)
-                continue
-            dict_info["notfound"] = False
-
-            for WordPositionModel, suffix in (
-                (MODELS.WordPositions, ""),
-                (MODELS.WordPositionsTitle, "_title"),
-            ):
-                res_get_new_tf = await WordPositionModel.filter(
-                    key__word__content=stem
-                ).values("tf_normalized", "frequency", "key__page__id")
-
-                for each_elem in res_get_new_tf:
-                    # print(each_elem)
-                    dict_info["tf_dict" + suffix][each_elem["key__page__id"]] = (
-                        dict_info["tf_dict"+ suffix].get(each_elem["key__page__id"], {})
-                    )
-                    dict_info["tf_dict" + suffix][each_elem["key__page__id"]][
-                        "tfnorm"
-                    ] = each_elem["tf_normalized"]
-                    dict_info["tf_dict" + suffix][each_elem["key__page__id"]]["tf"] = (
-                        each_elem["frequency"]
-                    )
-                    dict_info["tf_dict" + suffix][each_elem["key__page__id"]][
-                        "maxtf"
-                    ] = (each_elem["frequency"] / each_elem["tf_normalized"])
-
-                page_ids_in_dict = list(dict_info["tf_dict" + suffix].keys())
-
-                df = len(dict_info["tf_dict" + suffix].values())
-
-                try:
-                    word_idf = log2(len(page_ids) / df)
-                except:
-                    word_idf = 0 # doesnt matter since df = 0, so no document has non-zero tfxidf
-                dict_info["df" + suffix] = df
-                dict_info["idf" + suffix] = word_idf
-                # tfxidf = {k: v * word_idf for k, v in each_page_tf.items()}
-                for page_id_calc_tfxidf in page_ids_in_dict:
-                    dict_info["tf_dict" + suffix][page_id_calc_tfxidf][
-                        "tfxidf_div_maxtf"
-                    ] = (
-                        dict_info["tf_dict" + suffix][page_id_calc_tfxidf]["tfnorm"]
-                        * dict_info["idf" + suffix]
-                    )
-                # print(tfxidf)
-
-                if suffix == "_title":
-                    output_to_call_function_title.append(dict_info)
-                else:
-                    output_to_call_function.append(dict_info)
-
-        all_pages_in_consideration = set()
-        for dict_info in output_to_call_function:
-            # print(dict_info)
-            all_pages_in_consideration = all_pages_in_consideration.union(
-                set(dict_info["tf_dict"].keys())
-            )
-        vector_space_dict = {
-            page: {
-                dict_info["stem"]: dict_info["tf_dict"]
-                .get(page, {})
-                .get("tfxidf_div_maxtf", 0)
-                + 3.9 * dict_info["tf_dict_title"].get(page, {}).get("tfxidf_div_maxtf", 0)
-                for dict_info in output_to_call_function
-            }
-            for page in all_pages_in_consideration
-        }
-        # print("VECTOR SPACE BEFORE FILTER")
-        # print(vector_space_dict)
-
-        if False:
-            # filter to only consider full matches
-            vector_space_dict = {
-                k: v
-                for k, v in vector_space_dict.items()
-                if not any(x == 0 for x in v.values())
-            }
-        all_pages_in_consideration_afterfilter = vector_space_dict.keys()
-        for page in all_pages_in_consideration_afterfilter:
-            vector = list(vector_space_dict[page].values())
-            unit_vector = [1 for _ in range(len(vector))]
-            vector_space_dict[page]["__cos"] = cosine_distance(vector, unit_vector)
-            vector_space_dict[page]["__mag"] = magnitude_of_list(vector)
-        # print("VECTOR SPACE")
-        # print(vector_space_dict)
-        # print(all_pages_in_consideration)
-        show_stems_refreshable_element.refresh(output_to_call_function)
-        show_stems_title_refreshable_element.refresh(output_to_call_function_title)
-        show_vector_space_info.refresh(vector_space_dict)
-        vector_space_dict_sorted = dict(
-            sorted(
-                vector_space_dict.items(),
-                key=lambda x: (x[1]["__cos"], 1 / x[1]["__mag"]),
-            )
-        )
-        # print("==========")
-        # print(vector_space_dict_sorted)
-        for_show_all_pages = []
-        for k, v in vector_space_dict_sorted.items():
-            res_each_page = (
-                await MODELS.Page.filter(id=k)
-                .limit(1)
-                .values(
-                    "url__content", "mod_time", "size", "text", "plaintext", "title"
-                )
-            )
-            if_contain_phrase = False
-            if phrase is not None:
-                if phrase in res_each_page[0]["text"]:
-                    if_contain_phrase = True
-            else:
-                if_contain_phrase = True
-
-            if not if_contain_phrase:
-                continue
-
-
-            for_show_all_pages.append(
-                {
-                    "title": res_each_page[0]["title"],
-                    "size": res_each_page[0]["size"],
-                    "mod_time": res_each_page[0]["mod_time"],
-                    "plaintext": res_each_page[0]["plaintext"],
-                    "url": res_each_page[0]["url__content"],
-                }
-            )
-        show_all_pages.refresh(for_show_all_pages)
+        show_tf_idf.refresh(search_results)
+        show_tf_idf_title.refresh(search_results)
+        show_vector_space.refresh(search_results)
+        show_pages.refresh(search_results.pages, pagination_index=1)
 
     layout("Search")
 
@@ -420,12 +281,12 @@ def search():
         with ui.row().classes("w-full items-center"):
             input_field = ui.input("Search query").classes("grow")
             # fix the submission_onclick not a local variable error
-            ui.button("Submit", on_click=submission_onclick)
+            ui.button("Submit", on_click=search)
     indexed_how_many_pages = ui.label("Input query and press submit to search")
     with ui.row().classes("w-full items-center"):
         ui.label("Calculations: ")
-        show_stems_refreshable_element()
-        show_stems_title_refreshable_element()
-        show_vector_space_info()
-    show_all_pages()
-    show_all_pages.refresh()
+        show_tf_idf(None)
+        show_tf_idf_title(None)
+        show_vector_space(None)
+    show_pages(None)
+    # show_pages.refresh()
