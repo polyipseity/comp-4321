@@ -105,8 +105,9 @@ def layout(title: str) -> None:
     with ui.left_drawer(
         value=False, fixed=False, bordered=True, elevated=True
     ) as left_drawer:
-        ui.button("Home", on_click=lambda: ui.navigate.to("/"))
+        # ui.button("Home", on_click=lambda: ui.navigate.to("/"))
         ui.button("Search", on_click=lambda: ui.navigate.to("/search"))
+        ui.button("History", on_click=lambda: ui.navigate.to("/history"))
         ui.button("Debug", on_click=lambda: ui.navigate.to("/debug"))
 
 
@@ -116,6 +117,7 @@ def index() -> None:
     Index page.
     """
     layout("Home")
+    ui.navigate.to("/search")
 
 
 if __name__ in {"__main__", "__mp_main__"}:
@@ -136,4 +138,4 @@ if __name__ in {"__main__", "__mp_main__"}:
     import _debug as _debug  # type: ignore
     import _search as _search  # type: ignore
 
-    ui.run()
+    ui.run(storage_secret="testing")

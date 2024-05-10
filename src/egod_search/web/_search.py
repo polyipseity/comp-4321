@@ -1,10 +1,13 @@
 # -*- coding: UTF-8 -*-
+from inspect import isawaitable
+from tortoise.expressions import RawSQL
+from tortoise.query_utils import Prefetch
 from typing import Any, Sequence
 from egod_search.database.models import MODELS, Page, WordPositionsType
 from egod_search.query import lex_query, parse_query
 from egod_search.retrieve.search import SearchResultsDebug, search_terms_phrases
 from main import layout  # type: ignore
-from nicegui import ui
+from nicegui import app, ui
 
 _FLOAT_ROUND_DIGITS = 6
 
@@ -183,23 +186,57 @@ def show_vector_space(results: SearchResultsDebug | None):
     ui.button("Vector Space", on_click=dialog.open)
 
 
-def _show_page(page: Page, rank: int):
+async def _show_page(page: Page, score: float, rank: int):
     # Remember to prefetch/fetch `url`
     with ui.card().classes("w-full"):
         with ui.row().classes("w-fullitems-end"):
             ui.label(str(rank)).classes("text-4xl")
             ui.label(page.title).classes("text-2xl")
             ui.link(page.url.content, target=page.url.content)
+            ui.label(f"Score: {score}")
             ui.label(f"Size: {page.size}")
-            ui.label(f"Time: {page.mod_time.isoformat()}")
-            ui.separator()
+            ui.label(f"Last modification time: {page.mod_time.isoformat()}")
+            word_separator = ""
+            keywords_str = ""
+            async for word in (
+                MODELS.PageWord.filter(page=page)
+                .annotate(
+                    frequency=RawSQL(
+                        f"coalesce((SELECT frequency FROM {MODELS.WordPositions._meta.db_table} WHERE key_id = {MODELS.PageWord._meta.db_table}.id), 0)"  # type: ignore
+                    )
+                    + RawSQL(
+                        f"coalesce((SELECT frequency FROM {MODELS.WordPositionsTitle._meta.db_table} WHERE key_id = {MODELS.PageWord._meta.db_table}.id), 0)"  # type: ignore
+                    ),
+                )
+                .order_by("-frequency", "word__content")
+                .prefetch_related(
+                    Prefetch("word", MODELS.Word.all().only("id", "content"))
+                )
+                .limit(10)
+            ):
+                frequency = getattr(word, "frequency")
+                assert isinstance(frequency, int)
+                keywords_str += word_separator
+                word_separator = "; "
+                keywords_str += f"{word.word.content} {frequency}"
+        ui.label(keywords_str)
+
+        with ui.expansion("Inlinks").classes("w-full"), ui.list():
+            for outlink in await page.url.inlinks.limit(10).prefetch_related("url"):
+                ui.item(outlink.url.content)
+        with ui.expansion("Outlinks").classes("w-full"), ui.list():
+            for outlink in await page.outlinks.limit(10):
+                ui.item(outlink.content)
+        ui.separator()
         with ui.column().classes("w-full"):
             with ui.scroll_area().classes("w-full h-32 border"):
                 ui.label(page.plaintext[:339])
 
 
 @ui.refreshable
-def show_pages(pages: Sequence[Page] | None, *, pagination_index: int = 1):
+async def show_pages(
+    pages: Sequence[tuple[Page, float]] | None, *, pagination_index: int = 1
+):
     """
     Show all pages. Supports pagination.
 
@@ -235,16 +272,25 @@ def show_pages(pages: Sequence[Page] | None, *, pagination_index: int = 1):
     for rank, result in enumerate(
         partitioned_pages, (pagination_index - 1) * maximum_items_in_page + 1
     ):
-        _show_page(result, rank)
+        await _show_page(result[0], result[1], rank)
 
 
 @ui.page("/search")
-def search():
+async def search(query: str | None = None):
     """
     Search page.
     """
 
-    async def search():
+    val = app.storage.user.setdefault("history", [])
+    if not isinstance(val, list):
+        app.storage.user["history"] = val = []
+    val2: list[str] = val
+
+    async def submit_search():
+        if not (input := input_field.value):
+            return
+        val2.append(input)
+
         query_result = parse_query(lex_query(input_field.value))
         indexed_how_many_pages.text = (
             f"Finding from {await MODELS.Page.all().count()} pages"
@@ -257,7 +303,12 @@ def search():
         show_tf_idf.refresh(search_results)
         show_tf_idf_title.refresh(search_results)
         show_vector_space.refresh(search_results)
-        show_pages.refresh(search_results.pages, pagination_index=1)
+        tmp = show_pages.refresh(
+            tuple(zip(search_results.pages, search_results.weights, strict=True)),
+            pagination_index=1,
+        )
+        assert isawaitable(tmp)
+        await tmp
 
     layout("Search")
 
@@ -265,14 +316,61 @@ def search():
     with ui.card().classes("w-full"):
         # create row that fills available space
         with ui.row().classes("w-full items-center"):
-            input_field = ui.input("Search query").classes("grow")
+            input_field = ui.input("Search query", autocomplete=val2).classes("grow")
+            app.storage.user.on_change(  # type: ignore
+                lambda: input_field.set_autocomplete(val2)
+            )
             # fix the submission_onclick not a local variable error
-            ui.button("Submit", on_click=search)
+            ui.button("Submit", on_click=submit_search)
     indexed_how_many_pages = ui.label("Input query and press submit to search")
     with ui.row().classes("w-full items-center"):
         ui.label("Calculations: ")
         show_tf_idf(None)
         show_tf_idf_title(None)
         show_vector_space(None)
-    show_pages(None)
+    tmp = show_pages(None)
+    assert isawaitable(tmp)
+    await tmp
     # show_pages.refresh()
+
+    if query is not None:
+        input_field.value = query
+
+
+@ui.page("/history")
+def history():
+    val = app.storage.user.setdefault("history", [])
+    if not isinstance(val, list):
+        app.storage.user["history"] = val = []
+    val2: list[str] = val
+
+    layout("History")
+
+    checkboxes = list[ui.checkbox]()
+
+    @ui.refreshable
+    def checkboxes_list():
+        checkboxes.clear()
+        with ui.list():
+            for term in val2:
+                with ui.item():
+                    checkboxes.append(ui.checkbox(term))
+
+    checkboxes_list()
+
+    def delete_on_click():
+        for cb in checkboxes:
+            if cb.value:
+                val2.remove(cb.text)
+        checkboxes_list.refresh()
+
+    ui.button("Delete", on_click=delete_on_click)
+
+    def merge_and_search():
+        queries = list[str]()
+        for cb in checkboxes:
+            if cb.value:
+                queries.append(cb.text)
+        ui.navigate.to(f"/search?query={' '.join(queries)}")
+
+    ui.button("Merge & Search", on_click=merge_and_search)
