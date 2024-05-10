@@ -214,8 +214,8 @@ async def search_terms_phrases(
     page_magnitudes = norm(tf_idf, axis=1)  # TODO: consider title
     assert page_magnitudes.ndim == 1
     page_weights_indices: NDArray[intp] = lexsort(
-        (-page_weights, -page_magnitudes), axis=0
-    )
+        (-page_magnitudes, -page_weights), axis=0
+    )  # Note that the sort priority is reversed for `lexsort`
     assert page_weights_indices.ndim == 1
 
     ret = SearchResults(
