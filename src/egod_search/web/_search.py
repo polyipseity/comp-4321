@@ -1,5 +1,4 @@
 # -*- coding: UTF-8 -*-
-from inspect import isawaitable
 from tortoise.expressions import RawSQL
 from tortoise.query_utils import Prefetch
 from typing import Any, Sequence
@@ -303,12 +302,10 @@ async def search():
         show_tf_idf.refresh(search_results)
         show_tf_idf_title.refresh(search_results)
         show_vector_space.refresh(search_results)
-        tmp = show_pages.refresh(
+        show_pages.refresh(
             tuple(zip(search_results.pages, search_results.weights, strict=True)),
             pagination_index=1,
         )
-        assert isawaitable(tmp)
-        await tmp
 
     layout("Search")
 
@@ -328,9 +325,7 @@ async def search():
         show_tf_idf(None)
         show_tf_idf_title(None)
         show_vector_space(None)
-    tmp = show_pages(None)
-    assert isawaitable(tmp)
-    await tmp
+    show_pages(None)
     # show_pages.refresh()
 
     if (q := app.storage.user.get("search_query")) is not None:  # type: ignore
