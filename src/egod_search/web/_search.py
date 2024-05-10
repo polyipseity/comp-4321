@@ -200,15 +200,16 @@ def show_vector_space(results: SearchResultsDebug | None):
     ui.button("Vector Space", on_click=dialog.open)
 
 
-def _show_page(page: Page):
+def _show_page(page: Page, rank: int):
     # Remember to prefetch/fetch `url`
     with ui.card().classes("w-full"):
-        with ui.row().classes("w-full"):
-            ui.label("1").classes("text-4xl")
+        with ui.row().classes("w-fullitems-end"):
+            ui.label(str(rank)).classes("text-4xl")
             ui.label(page.title).classes("text-2xl")
             ui.link(page.url.content, target=page.url.content)
             ui.label(f"Size: {page.size}")
             ui.label(f"Time: {page.mod_time.isoformat()}")
+            ui.separator()
         with ui.column().classes("w-full"):
             with ui.scroll_area().classes("w-full h-32 border"):
                 ui.label(page.plaintext[:339])
@@ -248,8 +249,8 @@ def show_pages(pages: Sequence[Page] | None, *, pagination_index: int = 1):
         * maximum_items_in_page
     ]
     # print(partitioned_results)
-    for result in partitioned_pages:
-        _show_page(result)
+    for rank, result in enumerate(partitioned_pages, 1):
+        _show_page(result, rank)
 
 
 @ui.page("/search")
