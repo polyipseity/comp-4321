@@ -211,7 +211,7 @@ async def search_terms_phrases(
 
     page_weights = cos_sim + 3.9 * cos_sim_title
     assert page_weights.ndim == 1
-    page_magnitudes = norm(tf_idf, axis=1)  # TODO: consider title
+    page_magnitudes: NDArray[float64] = norm(tf_idf, axis=1)  # TODO: consider title
     assert page_magnitudes.ndim == 1
     page_weights_indices: NDArray[intp] = lexsort(
         (-page_magnitudes, -page_weights), axis=0
@@ -223,7 +223,9 @@ async def search_terms_phrases(
         terms=words_stems,
         stems=words,
         weights=take_along_axis(page_weights, indices=page_weights_indices, axis=0),
-        magnitudes=page_magnitudes,
+        magnitudes=take_along_axis(
+            page_magnitudes, indices=page_weights_indices, axis=0
+        ),
         tf_idf=take(tf_idf, indices=page_weights_indices, axis=0),
         tf_idf_title=take(tf_idf_title, indices=page_weights_indices, axis=0),
     )
