@@ -116,7 +116,7 @@ Finally, the term frequency and inverse document frequencies are calculated for 
 
 ## Web Interface - NiceGUI
 
-The web interface is based on the NiceGUI library which provides easy definitions of controls for a nice interface. When the GUI application starts, `layout` of `src/egod_search/web/main.py` is called. There are 3 pages in the left drawer: Home, Search, Debug. The Home page lists usage instructions.
+The web interface is based on the NiceGUI library which provides easy definitions of controls for a nice interface. When the GUI application starts, `layout` of `src/egod_search/web/main.py` is called. There are 2 pages in the left drawer: Search, Debug.
 
 The Search page is the main function - a search bar and a Submit button for querying the search engine. 3 additional buttons provide the calculations used for retrieving results: TFxIDF/max(TF), TFxIDF/max(TF) (title) and Vector space for the use of 3 different page embedding models. The user can then view the calculation details for each result.
 
@@ -254,6 +254,10 @@ WebSocket is a communication protocol that enables bidirectional communication c
 In conventional search engines, search queries are submitted using HTML forms as GET parameters in the HTTP request. However, this approach requires an additional HTTP request, causing the client to clear the current document's head and body in anticipation of receiving new content. As a result, the page momentarily flashes white, creating a visually disruptive experience.
 
 In our search engine, we leverage the NiceGUI framework, which utilizes WebSocket to establish bidirectional communication with the web client. Through this communication channel, the client can submit search queries and receive query results when the server is ready, all within the same connection. During the waiting period, on-screen elements such as the title and buttons remain in the document tree, eliminating any flashing effects.
+
+## Search history
+
+We also added search history and merging searches based on past queries. It is another bonus feature we decided to add.
 
 # Testing of the functions
 

@@ -165,6 +165,7 @@ cython_debug/
 *.db
 *.db-shm
 *.db-wal
+.nicegui/
 .vscode/
 /spider_result.txt
 web_args.json
