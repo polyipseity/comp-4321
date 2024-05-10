@@ -4,33 +4,8 @@ from egod_search.database.models import MODELS, Page, WordPositionsType
 from egod_search.query import lex_query, parse_query
 from egod_search.retrieve.search import SearchResultsDebug, search_terms_phrases
 from main import layout  # type: ignore
-from math import sqrt
 from nicegui import ui
 from numpy.linalg import norm
-
-
-def cosine_distance(list1: Sequence[float], list2: Sequence[float]):
-    """if len(list1) == 1:
-    return 1 / list1[0]"""
-
-    # Calculate dot product
-    dot_product = sum(x * y for x, y in zip(list1, list2))
-
-    # Calculate magnitudes
-    magnitude_list1 = sqrt(sum(x**2 for x in list1))
-    magnitude_list2 = sqrt(sum(x**2 for x in list2))
-
-    # Calculate cosine distance
-    cosine_distance = 1 - (dot_product / (magnitude_list1 * magnitude_list2))
-
-    if abs(cosine_distance) < 1e-9:
-        return 0
-
-    return cosine_distance
-
-
-def magnitude_of_list(list1: Sequence[float]):
-    return sqrt(sum(x**2 for x in list1))
 
 
 def _show_tf_idf(
