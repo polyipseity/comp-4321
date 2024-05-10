@@ -5,7 +5,6 @@ from egod_search.query import lex_query, parse_query
 from egod_search.retrieve.search import SearchResultsDebug, search_terms_phrases
 from main import layout  # type: ignore
 from nicegui import ui
-from numpy.linalg import norm
 
 
 def _show_tf_idf(
@@ -135,7 +134,7 @@ def show_vector_space(results: SearchResultsDebug | None):
         },
         {
             "name": "__mag",
-            "label": "Magnitude (tirbreaker)",
+            "label": "Magnitude (tiebreaker)",
             "field": "__mag",
             "required": True,
             "align": "left",
@@ -160,7 +159,7 @@ def show_vector_space(results: SearchResultsDebug | None):
                 {
                     "__id": page.id,
                     "__cos": results.weights[page_idx],
-                    "__mag": norm(results.tf_idf[page_idx]),  # TODO: consider title,
+                    "__mag": results.magnitudes[page_idx],
                     **dict(
                         zip(
                             (stem.content for stem in results.stems),

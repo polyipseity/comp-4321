@@ -8,7 +8,8 @@ from tortoise.expressions import Q
 from tortoise.query_utils import Prefetch
 from typing import Literal, OrderedDict, Sequence, overload
 
-from numpy import argsort, float64, int64, ones, take, take_along_axis
+from numpy import float64, int64, intp, lexsort, ones, take, take_along_axis
+from numpy.linalg import norm
 from numpy.typing import NDArray
 
 from . import cosine_similarity_many, idf_many, idf_raw_many, tf_idf_many, tf_many
@@ -24,7 +25,7 @@ class SearchResults:
 
     pages: Sequence[Page]
     """
-    List of pages, ordered by decreasing relevance to the terms.
+    List of pages, ordered by decreasing cosine similarity, then page vector magnitude if tied.
     """
 
     terms: OrderedDict[str, Word | None]
@@ -40,6 +41,13 @@ class SearchResults:
     weights: NDArray[float64]
     """
     Page weights.
+
+    A 1D array. Indexed by (page,).
+    """
+
+    magnitudes: NDArray[float64]
+    """
+    Page vector magnitudes.
 
     A 1D array. Indexed by (page,).
     """
@@ -203,13 +211,19 @@ async def search_terms_phrases(
 
     page_weights = cos_sim + 3.9 * cos_sim_title
     assert page_weights.ndim == 1
-    page_weights_indices = argsort(-page_weights, axis=0)
+    page_magnitudes = norm(tf_idf, axis=1)  # TODO: consider title
+    assert page_magnitudes.ndim == 1
+    page_weights_indices: NDArray[intp] = lexsort(
+        (-page_weights, -page_magnitudes), axis=0
+    )
+    assert page_weights_indices.ndim == 1
 
     ret = SearchResults(
         pages=tuple(pages[arg] for arg in page_weights_indices.flat),
         terms=words_stems,
         stems=words,
         weights=take_along_axis(page_weights, indices=page_weights_indices, axis=0),
+        magnitudes=page_magnitudes,
         tf_idf=take(tf_idf, indices=page_weights_indices, axis=0),
         tf_idf_title=take(tf_idf_title, indices=page_weights_indices, axis=0),
     )
@@ -239,6 +253,7 @@ async def search_terms_phrases(
             terms=ret.terms,
             stems=ret.stems,
             weights=ret.weights,
+            magnitudes=ret.magnitudes,
             tf_idf=ret.tf_idf,
             tf_idf_title=ret.tf_idf_title,
             idf_raw=idf_raw,
