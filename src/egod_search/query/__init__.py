@@ -69,6 +69,9 @@ def lex_query(query: str) -> Sequence[QueryToken]:
                 # Look for phrases in the input field which are surrounded by double quotes, which needs special attention. It is stored in phrase variable
                 if char == '"':
                     tokens.append(QueryToken(type="phrase", value=token))
+                    tokens.extend(
+                        QueryToken(type="term", value=tk) for tk in token.split(" ")
+                    )
                     token = ""
                     state = State.TERM
                     continue

@@ -5,6 +5,7 @@ We separated the system into different modules: crawl containing the crawler, da
 The program is written in Python and has two entry points, for the crawler and the web interface respectively. The crawler entry point runs the crawler and the indexer, saving to the database with a summary file. The web interface entry point provides a web interface for querying the database through the query parser and retrieval algorithm.
 
 # File structures used in index database
+
 ![database.svg](attachments/database.svg)
 
 ## General Principles
@@ -42,7 +43,6 @@ text   | Text | No | No | Complete page with HTML tags
 plaintext   | Text | No | No | Plain human-readable text without HTML tags
 title   | Text | No | No | Title of the page
 url_id | Integer (Foreign key - URL ID) | No | No | The URL ID associated with this page. Each page must have an associated URL but a URL might not have an associated Page.
-links????????????????????????? | Text | No | No | Sorted JSON list of unique URL IDs linked by this page. It is simpler on the application side not to create a whole new table just for storing links, but this also means complications on the database side?????????????????????????
 
 ## Page-word combination table `pageword`
 
@@ -91,7 +91,7 @@ The main algorithm for deciding which pages to crawl is the Breadth First Search
 The indexer is a converter from `UnindexedPage` to `IndexedPage`, implemented as the `index_page` function of `src/egod_search/index/__init__.py`. First, we extract the `<title>` tag and the page size from the `Content-Length` attribute from the HTTP response.
 
 Then, the text undergoes transformation with the following steps:
-1. Tokenize with `TreebankWordTokenizer` from the `nltk.tokenize` module, and normalized according to:
+1. Tokenize with `TreebankWordTokenizer` from the `nltk.tokenize` module.
 2. Normalize the word into Unicode Normalization Compatibility Form D (NFKD). This is for removing diacritics in the next step. Also, very similar looking characters are converted into the normal characters, such as `𝐀` to `A`.
 3. Remove non-alphanumeric characters. This also removes diacritics.
 4. Normalize the word into Unicode Normalization Compatibility Form C (NFKC).  This merges decomposed characters back into their normal form.
@@ -104,17 +104,21 @@ After that, the word occurrences are collected to derive the term frequency of e
 
 Finally, the word occurrence, frequency and normalized frequency information are stored. 
 
-## Retrieval function 
+## Retrieval function - Word embedding and cosine similarity
 
-............................................................................................
+When a query is submitted for searching, it is first lexed for separating terms (outside of double quotes) and phrases (inside double quotes) and parsed into a list of terms and a list of phrases. 
+
+For all 3 embedding models (TFxIDF, TFxIDF with title weighted 3.9 times more, vector space model), the terms are converted into word embeddings by following steps 2 to 7 as mentioned in the indexer part then looking up using the stemmed terms. If there are stemmed terms, we exclude any page not containing stemmed terms in content or title. Then, we also exclude any page not containing all phrases in content or title. 
+
+Finally, the term frequency and inverse document frequencies are calculated for cosine similarity ranking. 
 
 ## Web Interface - NiceGUI
 
 The web interface is based on the NiceGUI library which provides easy definitions of controls for a nice interface. When the GUI application starts, `layout` of `src/egod_search/web/main.py` is called. There are 3 pages in the left drawer: Home, Search, Debug. The Home page lists usage instructions.
 
-The Search page is the main function - a search bar and a Submit button for querying the search engine. 3 additional buttons provide the calculations used for retrieving results: TFxIDF/max(TF), TFxIDF/max(TF) (title) and Vector space for the use of 3 different page embedding models. 
+The Search page is the main function - a search bar and a Submit button for querying the search engine. 3 additional buttons provide the calculations used for retrieving results: TFxIDF/max(TF), TFxIDF/max(TF) (title) and Vector space for the use of 3 different page embedding models. The user can then view the calculation details for each result.
 
-The Debug page 
+The Debug page accepts Python code and outputs its result for debug use. 
 
 # Installation procedure
 
@@ -261,8 +265,8 @@ The testing of crawler is located in `src/egod_search/crawl/test___init__.py`, `
 
 # Conclusion: What are the strengths and weaknesses of your systems; what you would have done differently if you could re-implement the whole system; what would be the interesting features to add to your system, etc
 
-............................................................................................
+The system is very fast due to the use of optimisation techniques. If we could re-implement the system, a concurrent database would have been chosen to further speed up the system. An extension could be to consider links in page ranking as well.
 
 # Contribution
 
-............................................................................................
+33.333% for every member

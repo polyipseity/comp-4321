@@ -276,7 +276,7 @@ async def show_pages(
 
 
 @ui.page("/search")
-async def search(query: str | None = None):
+async def search():
     """
     Search page.
     """
@@ -313,7 +313,7 @@ async def search(query: str | None = None):
     layout("Search")
 
     # create a full-width ui.card for fitting the input field
-    with ui.card().classes("w-full"):
+    with ui.card().classes("w-full").on("keydown.enter", submit_search):
         # create row that fills available space
         with ui.row().classes("w-full items-center"):
             input_field = ui.input("Search query", autocomplete=val2).classes("grow")
@@ -333,8 +333,9 @@ async def search(query: str | None = None):
     await tmp
     # show_pages.refresh()
 
-    if query is not None:
-        input_field.value = query
+    if (q := app.storage.user.get("search_query")) is not None:  # type: ignore
+        del app.storage.user["search_query"]
+        input_field.value = q
 
 
 @ui.page("/history")
@@ -371,6 +372,7 @@ def history():
         for cb in checkboxes:
             if cb.value:
                 queries.append(cb.text)
-        ui.navigate.to(f"/search?query={' '.join(queries)}")
+        app.storage.user["search_query"] = " ".join(queries)
+        ui.navigate.to(f"/search")
 
     ui.button("Merge & Search", on_click=merge_and_search)

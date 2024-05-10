@@ -194,12 +194,15 @@ async def search_terms_phrases(
         pages = ()
 
     # excludes pages not containing exact phrases in content or title
+    phrases = tuple(map(str.casefold, phrases))
     pages = tuple(
         page
         for page in pages
-        if all(phrase in page.title or phrase in page.plaintext for phrase in phrases)
+        if all(
+            phrase in page.title.casefold() or phrase in page.plaintext.casefold()
+            for phrase in phrases
+        )
     )
-
     query_tf = ones((len(words),), dtype=float64)
     tf_idf, tf_idf_title = await gather(
         tf_idf_many(models, pages, words),
