@@ -114,7 +114,7 @@ async def tf_many(
 
     WordPositions = type.model(models)
     freq_key = "tf_normalized" if normalized else "frequency"
-    ret = empty((page_size, word_size), dtype=float64 if normalized else int64)
+    ret = zeros((page_size, word_size), dtype=float64 if normalized else int64)
 
     page_idx_map = {
         id: idx for idx, id in reversed(tuple(enumerate(page.id for page in pages)))
@@ -176,7 +176,7 @@ def cosine_similarity_many(
         return zeros(page_vectors.shape[:1])
     page_norms = norm(page_vectors, axis=1)
     return divide(
-        dot(query_vector, page_vectors),
+        dot(query_vector, page_vectors.T),
         query_norm * page_norms,
         out=zeros_like(page_norms),
         where=page_norms > 0,
