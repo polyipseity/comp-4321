@@ -30,6 +30,16 @@ def default_transform(text: str) -> Iterator[tuple[int, str]]:
     return ((pos, word) for pos, word in words if word)
 
 
+def default_transform_word(word: str) -> str:
+    """
+    Default text transformation pipeline for a word.
+    """
+    word = normalize_text_for_search(word)
+    if word in STOP_WORDS:
+        return ""
+    return porter(word)
+
+
 def normalize_text_for_search(text: str) -> str:
     """
     Normalize text for searching by doing the following:

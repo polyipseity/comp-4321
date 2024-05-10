@@ -1,5 +1,6 @@
 # -*- coding: UTF-8 -*-
 from asyncio import gather
+from enum import StrEnum
 from itertools import chain
 from typing import NamedTuple, Self, Type, TypeVar, cast
 from tortoise import Model
@@ -110,8 +111,16 @@ class Page(Model):
 
         abstract = True
 
+    id = BigIntField(generated=True, index=True, pk=True, unique=True)
+    """
+    Page ID.
+    """
+
     url: OneToOneRelation[URL] = OneToOneField(
-        f"{APP_NAME}.{URL.__name__}", related_name="page", on_delete=RESTRICT
+        f"{APP_NAME}.{URL.__name__}",
+        related_name="page",
+        on_delete=RESTRICT,
+        index=True,
     )
     """
     URL of the page.
@@ -322,9 +331,40 @@ class PageWord(Model):
     """
 
 
+class WordPositionsType(StrEnum):
+    """
+    Type of word positions.
+    """
+
+    __slots__ = ()
+
+    PLAINTEXT = "plaintext"
+    """
+    Represents word positions in plaintext.
+    """
+    TITLE = "title"
+    """
+    Represents word positions in title.
+    """
+
+    def model(self, models: "Models") -> type["WordPositions"]:
+        match self:
+            case self.PLAINTEXT:
+                return models.WordPositions
+            case self.TITLE:
+                return models.WordPositionsTitle
+            case _:  # type: ignore
+                raise ValueError(self)
+
+
 class WordPositions(Model):
     """
     Word positions for a page—word pair.
+    """
+
+    TYPE = WordPositionsType.PLAINTEXT
+    """
+    Type of word positions.
     """
 
     class Meta(Model.Meta):
@@ -337,7 +377,10 @@ class WordPositions(Model):
         unique_together = (("key",),)
 
     key: OneToOneRelation[PageWord] = OneToOneField(
-        f"{APP_NAME}.{PageWord.__name__}", related_name="positions", on_delete=CASCADE
+        f"{APP_NAME}.{PageWord.__name__}",
+        related_name="positions",
+        on_delete=CASCADE,
+        index=True,
     )
     """
     Corresponding page pair.
@@ -368,6 +411,11 @@ class WordPositionsTitle(WordPositions):
     Word positions for a page—word pair. For titles.
     """
 
+    TYPE = WordPositionsType.TITLE
+    """
+    Type of word positions.
+    """
+
     class Meta(WordPositions.Meta):
         """
         Model metadata.
@@ -379,6 +427,7 @@ class WordPositionsTitle(WordPositions):
         f"{APP_NAME}.{PageWord.__name__}",
         related_name="positions_title",
         on_delete=CASCADE,
+        index=True,
     )
     """
     Corresponding page pair.
