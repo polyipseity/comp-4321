@@ -1,7 +1,7 @@
 # -*- coding: UTF-8 -*-
 from dataclasses import dataclass
 from enum import IntEnum, auto
-from typing import Sequence
+from typing import Literal, Sequence
 
 
 @dataclass(frozen=True, kw_only=True, slots=True)
@@ -24,11 +24,27 @@ class ParsedQuery:
     """
 
 
-def lex_query(query: str) -> Sequence[str]:
+@dataclass(frozen=True, kw_only=True, slots=True)
+class QueryToken:
+    """
+    A query component.
+    """
+
+    type: Literal["term", "phrase"]
+    """
+    Type of query component.
+    """
+    value: str
+    """
+    Contents of query component.
+    """
+
+
+def lex_query(query: str) -> Sequence[QueryToken]:
     """
     Decompose a query into its components.
     """
-    tokens = list[str]()
+    tokens = list[QueryToken]()
 
     class State(IntEnum):
         TERM = auto()
@@ -40,17 +56,19 @@ def lex_query(query: str) -> Sequence[str]:
     for char in query:
         match state:
             case State.TERM:
-                if token in ' "':
+                # find raw stem words in the input field splitted by SPACE CHARACTER
+                if char in ' "':
                     if token:
-                        tokens.append(token)
+                        tokens.append(QueryToken(type="term", value=token))
                         token = ""
                     if char == '"':
                         state = State.PHRASE
                     continue
                 token += char
             case State.PHRASE:
+                # Look for phrases in the input field which are surrounded by double quotes, which needs special attention. It is stored in phrase variable
                 if char == '"':
-                    tokens.append(f'"{token}')
+                    tokens.append(QueryToken(type="phrase", value=token))
                     token = ""
                     state = State.TERM
                     continue
@@ -59,19 +77,22 @@ def lex_query(query: str) -> Sequence[str]:
                 raise ValueError()
 
     if token:
-        tokens.append(token)
+        tokens.append(QueryToken(type="term", value=token))
 
     return tokens
 
 
-def parse_query(tokens: Sequence[str]) -> ParsedQuery:
+def parse_query(tokens: Sequence[QueryToken]) -> ParsedQuery:
     """
-    Parse a decomposed query into a data structure.
+    Parse a decomposed query into a parsed query.
     """
     ret = ParsedQuery(terms=(terms := list[str]()), phrases=(phrases := list[str]()))
     for token in tokens:
-        if token.startswith('"'):
-            phrases.append(token[len('"') :])
-            continue
-        terms.append(token)
+        match token.type:
+            case "term":
+                terms.append(token.value)
+            case "phrase":
+                phrases.append(token.value)
+            case _:  # type: ignore
+                raise ValueError(token.type)
     return ret
