@@ -6,6 +6,8 @@ from egod_search.retrieve.search import SearchResultsDebug, search_terms_phrases
 from main import layout  # type: ignore
 from nicegui import ui
 
+_FLOAT_ROUND_DIGITS = 6
+
 
 def _show_tf_idf(
     results: SearchResultsDebug | None,
@@ -81,8 +83,12 @@ def _show_tf_idf(
                             {
                                 "id": page.id,
                                 "tf": tf[page_idx][stem_idx],
-                                "tfnorm": tf_norm[page_idx][stem_idx],
-                                "tfxidf_div_maxtf": tf_idf[page_idx][stem_idx],
+                                "tfnorm": round(
+                                    tf_norm[page_idx][stem_idx], _FLOAT_ROUND_DIGITS
+                                ),
+                                "tfxidf_div_maxtf": round(
+                                    tf_idf[page_idx][stem_idx], _FLOAT_ROUND_DIGITS
+                                ),
                             }
                             for page_idx, page in enumerate(results.pages)
                         ],
@@ -158,12 +164,15 @@ def show_vector_space(results: SearchResultsDebug | None):
             rows=[
                 {
                     "__id": page.id,
-                    "__cos": results.weights[page_idx],
-                    "__mag": results.magnitudes[page_idx],
+                    "__cos": round(results.weights[page_idx], _FLOAT_ROUND_DIGITS),
+                    "__mag": round(results.magnitudes[page_idx], _FLOAT_ROUND_DIGITS),
                     **dict(
                         zip(
                             (stem.content for stem in results.stems),
-                            results.tf_idf[page_idx],
+                            (
+                                round(tf_idf, _FLOAT_ROUND_DIGITS)
+                                for tf_idf in results.tf_idf[page_idx]
+                            ),
                             strict=True,
                         )
                     ),
