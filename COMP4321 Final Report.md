@@ -1,6 +1,6 @@
 # Overall design of the System
 
-We separated the system into different modules: crawl containing the crawler, database containing the database models and database saver, index containing the indexer that processes raw web pages into word occurrences and frequencies, query containing the query parser when retrieving, res containing the stop-words and words.txt for Porter's algorithm testing, retrieve containing the retrieval algorithm and web for the web interface. 
+We separated the system into different modules: crawl containing the crawler, database containing the database models and database saver, index containing the indexer that processes raw web pages into word occurrences and frequencies, query containing the query parser when retrieving, res containing the stop-words and words.txt for Porter's algorithm testing, retrieve containing the retrieval algorithm and web for the web interface.
 
 The program is written in Python and has two entry points, for the crawler and the web interface respectively. The crawler entry point runs the crawler and the indexer, saving to the database with a summary file. The web interface entry point provides a web interface for querying the database through the query parser and retrieval algorithm.
 
@@ -80,37 +80,39 @@ url_id      | Integer (Composite primary key, Foreign key - Url ID) | No | Yes (
 # Algorithms used
 
 ## Crawler - Breadth First Search
-The first part of the search engine is the crawler. Upon initiation of the crawler, a `ConcurrentCrawler` defined in `src/egod_search/crawl/concurrency.py` is created. When `show_progress` is `true` (no `--no-progress`): If `summary_path` (`-s` argument) is provided, then two progress bars for crawling and summary writing are presented; otherwise one progress bar for crawling is shown. This is defined in `src/egod_search/crawl/main.py`. 
 
-When each page is crawled, the `Crawler.crawl` method in `src/egod_search/crawl/__init__.py` is called. The HTTP response and content type of the page are validated, then we detect the character set to guard against non-UTF8 web pages. All `<a>` HTML tags that contain `http://` or `https://` outlinks are then extracted. 
+The first part of the search engine is the crawler. Upon initiation of the crawler, a `ConcurrentCrawler` defined in `src/egod_search/crawl/concurrency.py` is created. When `show_progress` is `true` (no `--no-progress`): If `summary_path` (`-s` argument) is provided, then two progress bars for crawling and summary writing are presented; otherwise one progress bar for crawling is shown. This is defined in `src/egod_search/crawl/main.py`.
 
-The main algorithm for deciding which pages to crawl is the Breadth First Search in `ConcurrentCrawler.run` of `src/egod_search/crawl/concurrency.py`. From the first requested page, we enqueue all outlinks, then crawl each dequeued page, with all outlinks enqueued. This is done until `page_count` (`-n` argument) is reached. Each crawled page is stored as in-memory objects of class `UnindexedPage` defined at `src/egod_search/index/__init__.py` and saved to the database sequentially with locking since SQLite does not support concurrent writing. Most of the code in the crawler relate to concurrency to speed up crawling. 
+When each page is crawled, the `Crawler.crawl` method in `src/egod_search/crawl/__init__.py` is called. The HTTP response and content type of the page are validated, then we detect the character set to guard against non-UTF8 web pages. All `<a>` HTML tags that contain `http://` or `https://` outlinks are then extracted.
+
+The main algorithm for deciding which pages to crawl is the Breadth First Search in `ConcurrentCrawler.run` of `src/egod_search/crawl/concurrency.py`. From the first requested page, we enqueue all outlinks, then crawl each dequeued page, with all outlinks enqueued. This is done until `page_count` (`-n` argument) is reached. Each crawled page is stored as in-memory objects of class `UnindexedPage` defined at `src/egod_search/index/__init__.py` and saved to the database sequentially with locking since SQLite does not support concurrent writing. Most of the code in the crawler relate to concurrency to speed up crawling.
 
 ## Indexer - Text transformation and collection of word occurrences
 
 The indexer is a converter from `UnindexedPage` to `IndexedPage`, implemented as the `index_page` function of `src/egod_search/index/__init__.py`. First, we extract the `<title>` tag and the page size from the `Content-Length` attribute from the HTTP response.
 
 Then, the text undergoes transformation with the following steps:
+
 1. Tokenize with `TreebankWordTokenizer` from the `nltk.tokenize` module.
 2. Normalize the word into Unicode Normalization Compatibility Form D (NFKD). This is for removing diacritics in the next step. Also, very similar looking characters are converted into the normal characters, such as `𝐀` to `A`.
 3. Remove non-alphanumeric characters. This also removes diacritics.
 4. Normalize the word into Unicode Normalization Compatibility Form C (NFKC).  This merges decomposed characters back into their normal form.
 5. Convert to lowercase.
 6. Remove stop-words defined in `src/egod_search/res/stop words.txt`.
-7. Stem according to Porter's stemming algorithm. 
+7. Stem according to Porter's stemming algorithm.
 8. Remove empty words after stemming.
 
-After that, the word occurrences are collected to derive the term frequency of each word and the normalized term frequency from dividing it by the maximum term frequency for later retrieval. 
+After that, the word occurrences are collected to derive the term frequency of each word and the normalized term frequency from dividing it by the maximum term frequency for later retrieval.
 
-Finally, the word occurrence, frequency and normalized frequency information are stored. 
+Finally, the word occurrence, frequency and normalized frequency information are stored.
 
 ## Retrieval function - Word embedding and cosine similarity
 
-When a query is submitted for searching, it is first lexed for separating terms (outside of double quotes) and phrases (inside double quotes) and parsed into a list of terms and a list of phrases. 
+When a query is submitted for searching, it is first lexed for separating terms (outside of double quotes) and phrases (inside double quotes) and parsed into a list of terms and a list of phrases.
 
-For all 3 embedding models (TFxIDF, TFxIDF with title weighted 3.9 times more, vector space model), the terms are converted into word embeddings by following steps 2 to 7 as mentioned in the indexer part then looking up using the stemmed terms. If there are stemmed terms, we exclude any page not containing stemmed terms in content or title. Then, we also exclude any page not containing all phrases in content or title. 
+For all 3 embedding models (TFxIDF, TFxIDF with title weighted 3.9 times more, vector space model), the terms are converted into word embeddings by following steps 2 to 7 as mentioned in the indexer part then looking up using the stemmed terms. If there are stemmed terms, we exclude any page not containing stemmed terms in content or title. Then, we also exclude any page not containing all phrases in content or title.
 
-Finally, the term frequency and inverse document frequencies are calculated for cosine similarity ranking. 
+Finally, the term frequency and inverse document frequencies are calculated for cosine similarity ranking.
 
 ## Web Interface - NiceGUI
 
@@ -118,7 +120,7 @@ The web interface is based on the NiceGUI library which provides easy definition
 
 The Search page is the main function - a search bar and a Submit button for querying the search engine. 3 additional buttons provide the calculations used for retrieving results: TFxIDF/max(TF), TFxIDF/max(TF) (title) and Vector space for the use of 3 different page embedding models. The user can then view the calculation details for each result.
 
-The Debug page accepts Python code and outputs its result for debug use. 
+The Debug page accepts Python code and outputs its result for debug use.
 
 # Installation procedure
 
@@ -202,6 +204,14 @@ On Linux or macOS:
 rm database.db
 ```
 
+## Step 7
+
+Run the web interface using the command.
+
+```shell
+python -m egod_search.web -d database.db
+```
+
 ## Important notices
 
 The program says it is `Finished` but does not end, just gets stuck:
@@ -245,25 +255,17 @@ In conventional search engines, search queries are submitted using HTML forms as
 
 In our search engine, we leverage the NiceGUI framework, which utilizes WebSocket to establish bidirectional communication with the web client. Through this communication channel, the client can submit search queries and receive query results when the server is ready, all within the same connection. During the waiting period, on-screen elements such as the title and buttons remain in the document tree, eliminating any flashing effects.
 
-# Testing of the functions implemented; include screenshots if applicable in the report
+# Testing of the functions
 
-## Crawler
+Tests can be run by running the following command after installing the package.
 
-The testing of crawler is located in `src/egod_search/crawl/test___init__.py`, `src/egod_search/crawl/test_concurrency.py` and `src/egod_search/crawl/test_main.py`. You run it via................................................................
+```
+egod-search-test
+```
 
-## Indexer
+A coverage report will be generated.
 
-............................................................................................
-
-## Retrieval function
-
-............................................................................................
-
-## Web Interface
-
-............................................................................................
-
-# Conclusion: What are the strengths and weaknesses of your systems; what you would have done differently if you could re-implement the whole system; what would be the interesting features to add to your system, etc
+# Conclusion
 
 The system is very fast due to the use of optimisation techniques. If we could re-implement the system, a concurrent database would have been chosen to further speed up the system. An extension could be to consider links in page ranking as well.
 
