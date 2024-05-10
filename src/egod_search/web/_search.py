@@ -143,6 +143,7 @@ def search():
                 "align": "left",
             },
         ]
+        # print(vector_space_dict)
         for stemwords in list(vector_space_dict.values())[0].keys():
             # but don't do that if it is "__cos" nor "__mag"
             if stemwords in ["__cos", "__mag"]:
@@ -203,12 +204,13 @@ def search():
 
     def show_each_page(each_info: Page):
         with ui.card().classes("w-full"):
-            with ui.row().classes("w-full"):
-                ui.label("1").classes("text-4xl")
+            with ui.row().classes("w-fullitems-end"):
+                ui.label(each_info["seq"]).classes("text-4xl")
                 ui.label(each_info["title"]).classes("text-2xl")
                 ui.link(each_info["url"], target=each_info["url"])
                 ui.label("Size: " + str(each_info["size"]))
                 ui.label("Time: " + str(each_info["mod_time"]))
+            ui.separator()
             with ui.column().classes("w-full"):
                 with ui.scroll_area().classes("w-full h-32 border"):
                     ui.label(each_info["plaintext"][:339])
@@ -226,6 +228,15 @@ def search():
         if page == None:
             page = 1
         arr_info_show_all_pages_cache = arr_info
+
+        # create arr_info_internal which is arr_info_show_all_pages_cache but each dictionary has additional key "seq" which increases from 1
+        arr_info_internal = []
+        for i, each_info in enumerate(arr_info_show_all_pages_cache):
+            each_info_internal = each_info.copy()
+            each_info_internal["seq"] = i + 1
+            arr_info_internal.append(each_info_internal)
+
+        
         maximum_items_in_page = 50
         how_many_pages = len(arr_info) // maximum_items_in_page + 1
         p = ui.pagination(
@@ -234,7 +245,7 @@ def search():
             value=page,
             direction_links=True,
             on_change=lambda x: show_all_pages.refresh(
-                arr_info_show_all_pages_cache, p.value
+                arr_info_internal, p.value
             ),
         )
         ui.label().bind_text_from(
@@ -247,16 +258,15 @@ def search():
         # print the list index for debugging
         print("Page", page)
         print((page - 1) * maximum_items_in_page, page * maximum_items_in_page)
-        arr_info_pertab = arr_info[
+        arr_info_pertab = arr_info_internal[
             (page - 1) * maximum_items_in_page : page * maximum_items_in_page
         ]
-        print(arr_info_pertab)
+        # print(arr_info_pertab)
         for each_info in arr_info_pertab:
             show_each_page(each_info)
 
     async def submission_onclick():
         output_to_call_function = []
-        output_to_call_function_title = []
 
         page_ids = [x["id"] for x in await MODELS.Page.all().values("id")]
         indexed_how_many_pages.text = f"Finding from {len(page_ids)} pages"
@@ -330,16 +340,16 @@ def search():
                     )
                 # print(tfxidf)
 
-                if suffix == "_title":
-                    output_to_call_function_title.append(dict_info)
-                else:
-                    output_to_call_function.append(dict_info)
+            output_to_call_function.append(dict_info)
 
         all_pages_in_consideration = set()
         for dict_info in output_to_call_function:
             # print(dict_info)
             all_pages_in_consideration = all_pages_in_consideration.union(
                 set(dict_info["tf_dict"].keys())
+            )
+            all_pages_in_consideration = all_pages_in_consideration.union(
+                set(dict_info["tf_dict_title"].keys())
             )
         vector_space_dict = {
             page: {
@@ -371,7 +381,7 @@ def search():
         # print(vector_space_dict)
         # print(all_pages_in_consideration)
         show_stems_refreshable_element.refresh(output_to_call_function)
-        show_stems_title_refreshable_element.refresh(output_to_call_function_title)
+        show_stems_title_refreshable_element.refresh(output_to_call_function)
         show_vector_space_info.refresh(vector_space_dict)
         vector_space_dict_sorted = dict(
             sorted(
@@ -392,7 +402,7 @@ def search():
             )
             if_contain_phrase = False
             if phrase is not None:
-                if phrase in res_each_page[0]["text"]:
+                if phrase.lower() in res_each_page[0]["text"].lower() or phrase.lower() in res_each_page[0]["title"].lower():
                     if_contain_phrase = True
             else:
                 if_contain_phrase = True
