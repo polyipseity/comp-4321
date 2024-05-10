@@ -206,7 +206,7 @@ def show_pages(pages: Sequence[Page] | None, *, pagination_index: int = 1):
         how_many_pages,
         value=pagination_index,
         direction_links=True,
-        on_change=lambda: show_pages.refresh(p.value),
+        on_change=lambda: show_pages.refresh(pagination_index=p.value),
     )
 
     def binder(pagination_index: int):
@@ -224,7 +224,9 @@ def show_pages(pages: Sequence[Page] | None, *, pagination_index: int = 1):
         * maximum_items_in_page
     ]
     # print(partitioned_results)
-    for rank, result in enumerate(partitioned_pages, 1):
+    for rank, result in enumerate(
+        partitioned_pages, (pagination_index - 1) * maximum_items_in_page + 1
+    ):
         _show_page(result, rank)
 
 
