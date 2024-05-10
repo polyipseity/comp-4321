@@ -170,6 +170,10 @@ def cosine_similarity_many(
     """
     assert query_vector.ndim == 1
     assert page_vectors.ndim == 2
+
+    if page_vectors.shape[0] <= 0:
+        return empty((0,), dtype=float64)
+
     assert query_vector.shape[0] == page_vectors.shape[1]
     query_norm = norm(query_vector)
     if query_norm <= 0:
