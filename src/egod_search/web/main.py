@@ -1,4 +1,3 @@
-# -*- coding: UTF-8 -*-
 # macOS packaging support: https://nicegui.io/documentation/section_configuration_deployment#macos_packaging #
 from multiprocessing import freeze_support  # noqa
 

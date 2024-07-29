@@ -1,4 +1,3 @@
-# -*- coding: UTF-8 -*-
 from functools import partial
 from aiohttp import ClientResponse, ClientSession
 from asyncio import QueueEmpty

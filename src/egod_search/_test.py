@@ -1,4 +1,3 @@
-# -*- coding: UTF-8 -*-
 from multiprocessing import cpu_count, dummy
 from os import chdir
 from pathlib import Path

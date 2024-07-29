@@ -1,4 +1,3 @@
-# -*- coding: UTF-8 -*-
 from asyncio import TaskGroup, gather, to_thread
 from importlib.resources import files
 from os import cpu_count

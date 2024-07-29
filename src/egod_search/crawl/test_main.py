@@ -1,4 +1,3 @@
-# -*- coding: UTF-8 -*-
 from datetime import datetime, timezone
 from importlib.resources import files
 from os import getenv

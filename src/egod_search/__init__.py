@@ -1,5 +1,3 @@
-# -*- coding: UTF-8 -*-
-
 NAME = "egod-search"  # synchronize with `pyproject.toml`
 """
 Package name.

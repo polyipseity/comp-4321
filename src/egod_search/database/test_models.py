@@ -1,4 +1,3 @@
-# -*- coding: UTF-8 -*-
 from unittest import main
 
 

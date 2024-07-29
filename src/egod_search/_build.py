@@ -1,4 +1,3 @@
-# -*- coding: UTF-8 -*-
 from pathlib import Path
 from PyInstaller.__main__ import run
 

@@ -1,4 +1,3 @@
-# -*- coding: UTF-8 -*-
 from tortoise.expressions import RawSQL
 from tortoise.query_utils import Prefetch
 from typing import Any, Sequence

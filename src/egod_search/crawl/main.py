@@ -1,4 +1,3 @@
-# -*- coding: UTF-8 -*-
 from asyncio import Lock
 from logging import INFO, basicConfig, getLogger
 from aiohttp import ClientResponseError

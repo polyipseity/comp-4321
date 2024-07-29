@@ -1,4 +1,3 @@
-# -*- coding: UTF-8 -*-
 from dataclasses import dataclass
 from enum import IntEnum, auto
 from typing import Literal, Sequence

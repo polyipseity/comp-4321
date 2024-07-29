@@ -1,4 +1,3 @@
-# -*- coding: UTF-8 -*-
 from asyncio import gather
 from dataclasses import dataclass
 from functools import reduce

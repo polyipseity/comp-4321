@@ -1,4 +1,3 @@
-# -*- coding: UTF-8 -*-
 import builtins
 from functools import wraps
 from inspect import isawaitable

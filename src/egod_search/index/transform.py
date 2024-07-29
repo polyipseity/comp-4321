@@ -1,4 +1,3 @@
-# -*- coding: UTF-8 -*-
 from functools import cache, wraps
 from importlib.resources import files
 from itertools import islice, pairwise, tee

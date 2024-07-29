@@ -1,4 +1,3 @@
-# -*- coding: UTF-8 -*-
 from asyncio import gather
 from enum import StrEnum
 from itertools import chain

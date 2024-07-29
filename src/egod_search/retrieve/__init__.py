@@ -1,4 +1,3 @@
-# -*- coding: UTF-8 -*-
 from asyncio import gather
 from functools import reduce
 from numpy import divide, dot, empty, float64, int64, log2, zeros, zeros_like

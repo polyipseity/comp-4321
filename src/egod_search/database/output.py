@@ -1,4 +1,3 @@
-# -*- coding: UTF-8 -*-
 from datetime import timezone
 from io import StringIO
 from tortoise.expressions import RawSQL
